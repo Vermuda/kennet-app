@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { loadData, updateData } from '../storage/localStorage';
-import type { ReferenceImage, Blueprint } from '../types';
+import type { ReferenceImage } from '../types';
 
 const ReferenceImagesPage: React.FC = () => {
   const { blueprintId } = useParams<{ blueprintId: string }>();
-  const [blueprint, setBlueprint] = useState<Blueprint | null>(null);
   const [referenceImages, setReferenceImages] = useState<ReferenceImage[]>([]);
   const [selectedImage, setSelectedImage] = useState<ReferenceImage | null>(null);
   const navigate = useNavigate();
@@ -17,7 +16,6 @@ const ReferenceImagesPage: React.FC = () => {
       navigate('/properties');
       return;
     }
-    setBlueprint(blueprintData);
 
     const floor = data.floors.find((f) => f.id === blueprintData.floorId);
     if (!floor) return;

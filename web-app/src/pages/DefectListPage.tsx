@@ -14,7 +14,6 @@ const DefectListPage: React.FC = () => {
   const { blueprintId } = useParams<{ blueprintId: string }>();
   const [defects, setDefects] = useState<DefectWithDetails[]>([]);
   const [selectedDefect, setSelectedDefect] = useState<DefectWithDetails | null>(null);
-  const [blueprint, setBlueprint] = useState<Blueprint | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -29,8 +28,6 @@ const DefectListPage: React.FC = () => {
       navigate('/properties');
       return;
     }
-    
-    setBlueprint(blueprintData);
 
     // この図面に関連する不具合を取得
     const defectsWithDetails: DefectWithDetails[] = [];

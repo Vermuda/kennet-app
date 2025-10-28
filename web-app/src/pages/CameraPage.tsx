@@ -1,10 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 
-interface CameraPageProps {
-  mode?: 'defect' | 'reference';
-}
-
 const CameraPage: React.FC = () => {
   const { mode } = useParams<{ mode: 'defect' | 'reference' }>();
   const navigate = useNavigate();
