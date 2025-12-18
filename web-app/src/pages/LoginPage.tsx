@@ -8,11 +8,11 @@ const LoginPage: React.FC = () => {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    const user = authenticateUser(username, password);
+    const user = await authenticateUser(username, password);
     if (user) {
       navigate('/properties');
     } else {
@@ -69,12 +69,6 @@ const LoginPage: React.FC = () => {
             ログイン
           </button>
         </form>
-
-        <div className="mt-6 p-4 bg-gray-100 rounded text-sm text-gray-600">
-          <p className="font-semibold mb-2">テストアカウント:</p>
-          <p>ユーザー1: user1 / password1</p>
-          <p>ユーザー2: user2 / password2</p>
-        </div>
       </div>
     </div>
   );

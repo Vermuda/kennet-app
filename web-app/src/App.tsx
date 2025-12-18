@@ -12,6 +12,7 @@ import DefectListPage from './pages/DefectListPage';
 import DefectEditPage from './pages/DefectEditPage';
 import ReferenceImageInputPage from './pages/ReferenceImageInputPage';
 import ReferenceImagesPage from './pages/ReferenceImagesPage';
+import StorageDebugInfo from './components/StorageDebugInfo';
 
 const App: React.FC = () => {
   return (
@@ -31,6 +32,9 @@ const App: React.FC = () => {
         <Route path="/reference-images/:blueprintId" element={<ReferenceImagesPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      
+      {/* デバッグ情報表示（開発中のみ表示） */}
+      <StorageDebugInfo show={import.meta.env.DEV} />
     </Router>
   );
 };

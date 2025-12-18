@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { loadData, updateData } from '../storage/localStorage';
+import { loadData, updateData, logStorageUsage, getStorageWarningLevel } from '../storage/localStorage';
 import { generateId, convertImageToBase64 } from '../utils/helpers';
+import { compressImage, formatSize, getBase64Size } from '../utils/imageCompression';
 import type { Floor, Blueprint } from '../types';
 
 const FloorBlueprintPage: React.FC = () => {
@@ -28,22 +29,65 @@ const FloorBlueprintPage: React.FC = () => {
     if (!file) return;
 
     try {
-      const imageData = await convertImageToBase64(file);
+      // まず元の画像を読み込み
+      const originalImageData = await convertImageToBase64(file);
+      const originalSize = getBase64Size(originalImageData);
+      
+      console.log('[FloorBlueprint] Original image loaded:', {
+        fileName: file.name,
+        size: formatSize(originalSize),
+      });
+      
+      // LocalStorageの使用状況をチェック
+      logStorageUsage();
+      const warningLevel = getStorageWarningLevel();
+      
+      if (warningLevel === 'critical') {
+        alert('⚠️ LocalStorageの容量が不足しています。\n古いデータを削除するか、データをエクスポートしてください。');
+        return;
+      } else if (warningLevel === 'warning') {
+        const proceed = window.confirm(
+          '⚠️ LocalStorageの使用量が多くなっています。\n' +
+          'このまま追加しますか？\n\n' +
+          '（データエクスポートを推奨します）'
+        );
+        if (!proceed) return;
+      }
+      
+      // WebP 80%で圧縮
+      const compressed = await compressImage(originalImageData, {
+        quality: 0.8,
+        maxWidth: 1920,
+        maxHeight: 1080,
+        format: 'webp',
+      });
+      
+      console.log('[FloorBlueprint] Image compressed:', {
+        format: compressed.format,
+        originalSize: formatSize(compressed.originalSize),
+        compressedSize: formatSize(compressed.compressedSize),
+        compressionRatio: `${compressed.compressionRatio.toFixed(1)}% reduction`,
+        dimensions: `${compressed.width}x${compressed.height}`,
+      });
+      
       const data = loadData();
 
       const newBlueprint: Blueprint = {
         id: generateId(),
         floorId: floorId!,
-        imageData,
+        imageData: compressed.dataUrl,
         createdAt: new Date().toISOString(),
       };
 
       const updatedBlueprints = [...data.blueprints, newBlueprint];
       updateData('blueprints', updatedBlueprints);
       setBlueprints([...blueprints, newBlueprint]);
+      
+      // 完了後の使用状況をログ
+      logStorageUsage();
     } catch (error) {
       console.error('Failed to load image:', error);
-      alert('画像の読み込みに失敗しました');
+      alert('画像の読み込みまたは圧縮に失敗しました');
     }
   };
 

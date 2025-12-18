@@ -78,6 +78,45 @@ export interface ReferenceImage {
   createdAt: string;
 }
 
+// 画像メタデータ
+export interface ImageMetadata {
+  format: 'webp' | 'jpeg';
+  quality: number;
+  originalSize: number;
+  compressedSize: number;
+  compressionRatio: number;
+  width: number;
+  height: number;
+}
+
+// LocalStorageの使用状況
+export interface StorageUsage {
+  used: number; // 使用中のバイト数
+  total: number; // 総容量（推定）
+  available: number; // 利用可能なバイト数
+  usagePercentage: number; // 使用率（%）
+  itemCount: number; // アイテム数
+}
+
+// B2アップロード状態
+export interface B2UploadStatus {
+  isUploading: boolean;
+  progress: number; // 0-100
+  uploadedCount: number;
+  totalCount: number;
+  currentFile?: string;
+  error?: string;
+}
+
+// B2にアップロード済みの画像情報
+export interface B2ImageInfo {
+  id: string;
+  b2Key: string; // B2のキー
+  b2Url: string; // B2のURL
+  uploadedAt: string;
+  size: number;
+}
+
 // 検査分類マスタ（将来的にはサーバーから取得することを想定）
 export interface InspectionCategory {
   major: string[];
