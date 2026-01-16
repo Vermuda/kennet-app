@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>パターン3: ステッパー - UIモック</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    * { -webkit-tap-highlight-color: transparent; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    
+    .eval-btn { 
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      border-radius: 12px; font-weight: bold; transition: all 0.2s; padding: 16px;
+    }
+    .eval-btn.selected { transform: scale(1.05); box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+    .eval-a { background: #dcfce7; color: #16a34a; border: 3px solid #16a34a; }
+    .eval-a.selected { background: #16a34a; color: white; }
+    .eval-b1 { background: #dbeafe; color: #2563eb; border: 3px solid #2563eb; }
+    .eval-b1.selected { background: #2563eb; color: white; }
+    .eval-b2 { background: #fef3c7; color: #d97706; border: 3px solid #d97706; }
+    .eval-b2.selected { background: #d97706; color: white; }
+    .eval-c { background: #fee2e2; color: #dc2626; border: 3px solid #dc2626; }
+    .eval-c.selected { background: #dc2626; color: white; }
+    .big-check { width: 24px; height: 24px; accent-color: #10b981; }
+  </style>
+</head>
+<body class="bg-gradient-to-b from-slate-800 to-slate-900 min-h-screen text-white">
+  <!-- ヘッダー -->
+  <header class="sticky top-0 bg-slate-800 px-4 py-3 z-10">
+    <div class="flex justify-between items-center mb-2">
+      <a href="mock-list.html" class="text-slate-400 text-sm">← 一覧に戻る</a>
+      <span class="text-emerald-400 font-bold">4 / 25</span>
+    </div>
+    <div class="font-bold">パターン3: ステッパー</div>
+    <!-- プログレスドット -->
+    <div class="flex gap-1 mt-3 overflow-x-auto pb-1">
+      <span class="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0"></span>
+      <span class="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0"></span>
+      <span class="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0"></span>
+      <span class="w-3 h-3 rounded-full bg-white flex-shrink-0 -mt-0.5"></span>
+      <span class="w-2 h-2 rounded-full bg-slate-600 flex-shrink-0"></span>
+      <span class="w-2 h-2 rounded-full bg-slate-600 flex-shrink-0"></span>
+      <span class="w-2 h-2 rounded-full bg-slate-600 flex-shrink-0"></span>
+      <span class="w-2 h-2 rounded-full bg-slate-600 flex-shrink-0"></span>
+      <span class="w-2 h-2 rounded-full bg-slate-600 flex-shrink-0"></span>
+      <span class="w-2 h-2 rounded-full bg-slate-600 flex-shrink-0"></span>
+    </div>
+  </header>
+
+  <div class="p-6 flex flex-col min-h-[calc(100vh-140px)]">
+    <!-- カテゴリ -->
+    <div class="text-center mb-4">
+      <span class="bg-blue-500/30 text-blue-300 text-sm px-3 py-1 rounded-full">
+        外部① 敷地及び地盤
+      </span>
+    </div>
+
+    <!-- メインコンテンツ -->
+    <div class="flex-1 flex flex-col justify-center">
+      <h2 class="text-3xl font-bold text-center mb-4">水抜きパイプ</h2>
+      <p class="text-slate-400 text-center mb-8 leading-relaxed">
+        擁壁の水抜きパイプの<br>維持保全の有無
+      </p>
+
+      <!-- 大きな評価ボタン -->
+      <div class="grid grid-cols-2 gap-4 mb-6">
+        <button class="eval-btn eval-a">
+          <span class="text-2xl">a</span>
+          <span class="text-xs mt-1 opacity-70">問題なし</span>
+        </button>
+        <button class="eval-btn eval-b1">
+          <span class="text-2xl">b1</span>
+          <span class="text-xs mt-1 opacity-70">経過観察</span>
+        </button>
+        <button class="eval-btn eval-b2">
+          <span class="text-2xl">b2</span>
+          <span class="text-xs mt-1 opacity-70">要補修</span>
+        </button>
+        <button class="eval-btn eval-c">
+          <span class="text-2xl">c</span>
+          <span class="text-xs mt-1 opacity-70">著しい劣化</span>
+        </button>
+      </div>
+
+      <!-- 調査方法（折りたたみ） -->
+      <details class="bg-slate-700/50 rounded-xl p-4">
+        <summary class="text-sm text-slate-300 cursor-pointer">調査方法を選択</summary>
+        <div class="flex gap-4 mt-3">
+          <label class="flex items-center gap-2 text-sm">
+            <input type="checkbox" class="big-check"> 目視
+          </label>
+          <label class="flex items-center gap-2 text-sm">
+            <input type="checkbox" class="big-check"> 計測
+          </label>
+          <label class="flex items-center gap-2 text-sm">
+            <input type="checkbox" class="big-check"> 触診
+          </label>
+        </div>
+      </details>
+    </div>
+
+    <!-- ナビゲーション -->
+    <div class="flex gap-4 mt-6">
+      <button class="flex-1 border-2 border-slate-600 text-slate-300 py-4 rounded-xl font-bold">
+        ← 前へ
+      </button>
+      <button class="flex-1 bg-emerald-600 text-white py-4 rounded-xl font-bold">
+        次へ →
+      </button>
+    </div>
+  </div>
+
+  <script>
+    document.querySelectorAll('.eval-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('.eval-btn').forEach(b => b.classList.remove('selected'));
+        this.classList.add('selected');
+      });
+    });
+  </script>
+</body>
+</html>

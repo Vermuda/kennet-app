@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>検査項目入力 - UIモック</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* カスタムチェックボックス */
+    .custom-checkbox {
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      border: 2px solid #9ca3af;
+      border-radius: 3px;
+      cursor: pointer;
+      position: relative;
+    }
+    .custom-checkbox:checked {
+      background-color: #10b981;
+      border-color: #10b981;
+    }
+    .custom-checkbox:checked::after {
+      content: '✓';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-size: 12px;
+      font-weight: bold;
+    }
+    
+    /* カスタムラジオボタン */
+    .custom-radio {
+      appearance: none;
+      width: 20px;
+      height: 20px;
+      border: 2px solid #9ca3af;
+      border-radius: 50%;
+      cursor: pointer;
+      position: relative;
+    }
+    .custom-radio:checked {
+      border-color: #10b981;
+    }
+    .custom-radio:checked::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 10px;
+      height: 10px;
+      background-color: #10b981;
+      border-radius: 50%;
+    }
+    .custom-radio.radio-a:checked { border-color: #22c55e; }
+    .custom-radio.radio-a:checked::after { background-color: #22c55e; }
+    .custom-radio.radio-b1:checked { border-color: #3b82f6; }
+    .custom-radio.radio-b1:checked::after { background-color: #3b82f6; }
+    .custom-radio.radio-b2:checked { border-color: #f59e0b; }
+    .custom-radio.radio-b2:checked::after { background-color: #f59e0b; }
+    .custom-radio.radio-c:checked { border-color: #ef4444; }
+    .custom-radio.radio-c:checked::after { background-color: #ef4444; }
+
+    /* テーブルスタイル */
+    .inspection-table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+    .inspection-table th,
+    .inspection-table td {
+      border: 1px solid #d1d5db;
+      padding: 8px;
+      text-align: center;
+      vertical-align: middle;
+    }
+    .inspection-table th {
+      background-color: #f3f4f6;
+      font-weight: 600;
+    }
+    .inspection-table .category-header {
+      background-color: #dbeafe;
+      font-weight: bold;
+      text-align: left;
+    }
+    .inspection-table .item-name {
+      text-align: left;
+      font-weight: 500;
+    }
+    .inspection-table .content {
+      text-align: left;
+      font-size: 0.875rem;
+    }
+    
+    /* 評価の色分け */
+    .eval-a { color: #22c55e; font-weight: bold; }
+    .eval-b1 { color: #3b82f6; font-weight: bold; }
+    .eval-b2 { color: #f59e0b; font-weight: bold; }
+    .eval-c { color: #ef4444; font-weight: bold; }
+    
+    /* 完了行 */
+    .row-completed {
+      background-color: #f0fdf4;
+    }
+    .row-defect {
+      background-color: #fef3c7;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+  <!-- ヘッダー -->
+  <header class="bg-gray-800 text-white shadow sticky top-0 z-10">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-4">
+        <button class="px-4 py-2 border-2 border-white text-white rounded-lg font-semibold hover:bg-white hover:text-gray-800 transition">
+          ← 図面に戻る
+        </button>
+        <h1 class="text-xl font-bold">検査項目入力</h1>
+      </div>
+      <div class="flex items-center gap-4">
+        <span class="text-sm bg-emerald-600 px-3 py-1 rounded-full">
+          完了: <span id="completedCount">3</span> / <span id="totalCount">25</span>
+        </span>
+        <button class="px-4 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 transition">
+          保存して戻る
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- メインコンテンツ -->
+  <main class="max-w-7xl mx-auto px-4 py-6">
+    <!-- 位置情報 -->
+    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+      <div class="flex items-center gap-4">
+        <span class="text-blue-800 font-semibold">📍 図面上の位置:</span>
+        <span class="text-blue-600">X: 45.2%, Y: 32.8%</span>
+        <button class="ml-auto text-sm text-blue-600 hover:text-blue-800 underline">位置を変更</button>
+      </div>
+    </div>
+
+    <!-- 検査テーブル -->
+    <div class="bg-white rounded-xl shadow-lg overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="inspection-table">
+          <thead>
+            <tr>
+              <th class="w-12">No</th>
+              <th class="w-32">調査項目</th>
+              <th class="w-64">調査内容（劣化度合）</th>
+              <th class="w-24">調査方法</th>
+              <th class="w-40">評価</th>
+              <th class="w-24">写真</th>
+              <th class="w-20">状態</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- カテゴリヘッダー: 外部① -->
+            <tr>
+              <td colspan="7" class="category-header">
+                <span class="text-blue-800">外部① 敷地及び地盤</span>
+              </td>
+            </tr>
+            
+            <!-- 項目1: 地盤 (完了・問題なし) -->
+            <tr class="row-completed">
+              <td>1</td>
+              <td class="item-name">地盤</td>
+              <td class="content">地盤沈下等による不陸、傾斜等の有無</td>
+              <td>
+                <div class="flex flex-col gap-1 items-start px-2">
+                  <label class="flex items-center gap-1 text-xs cursor-pointer">
+                    <input type="checkbox" class="custom-checkbox" checked> 目視
+                  </label>
+                  <label class="flex items-center gap-1 text-xs cursor-pointer">
+                    <input type="checkbox" class="custom-checkbox"> 計測
+                  </label>
+                  <label class="flex items-center gap-1 text-xs cursor-pointer">
+                    <input type="checkbox" class="custom-checkbox"> 触診
+                  </label>
+                </div>
+              </td>
+              <td>
+                <div class="flex justify-center gap-2">
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval1" class="custom-radio radio-a" checked>
+                    <span class="text-xs eval-a mt-1">a</span>
+                  </label>
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval1" class="custom-radio radio-b1">
+                    <span class="text-xs eval-b1 mt-1">b1</span>
+                  </label>
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval1" class="custom-radio radio-b2">
+                    <span class="text-xs eval-b2 mt-1">b2</span>
+                  </label>
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval1" class="custom-radio radio-c">
+                    <span class="text-xs eval-c mt-1">c</span>
+                  </label>
+                </div>
+              </td>
+              <td>
+                <span class="text-gray-400 text-sm">-</span>
+              </td>
+              <td>
+                <span class="text-emerald-600 font-bold">✓</span>
+              </td>
+            </tr>
+
+            <!-- 項目2: 敷地 (完了・不具合あり) -->
+            <tr class="row-defect">
+              <td>2</td>
+              <td class="item-name">敷地</td>
+              <td class="content">敷地内の排水桝の破損等の有無（側溝、マンホール及び桝の状況）</td>
+              <td>
+                <div class="flex flex-col gap-1 items-start px-2">
+                  <label class="flex items-center gap-1 text-xs cursor-pointer">
+                    <input type="checkbox" class="custom-checkbox" checked> 目視
+                  </label>
+                  <label class="flex items-center gap-1 text-xs cursor-pointer">
+                    <input type="checkbox" class="custom-checkbox" checked> 計測
+                  </label>
+                  <label class="flex items-center gap-1 text-xs cursor-pointer">
+                    <input type="checkbox" class="custom-checkbox"> 触診
+                  </label>
+                </div>
+              </td>
+              <td>
+                <div class="flex justify-center gap-2">
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval2" class="custom-radio radio-a">
+                    <span class="text-xs eval-a mt-1">a</span>
+                  </label>
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval2" class="custom-radio radio-b1">
+                    <span class="text-xs eval-b1 mt-1">b1</span>
+                  </label>
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval2" class="custom-radio radio-b2" checked>
+                    <span class="text-xs eval-b2 mt-1">b2</span>
+                  </label>
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval2" class="custom-radio radio-c">
+                    <span class="text-xs eval-c mt-1">c</span>
+                  </label>
+                </div>
+              </td>
+              <td>
+                <button class="bg-amber-500 text-white text-xs px-2 py-1 rounded hover:bg-amber-600 transition">
+                  📷 1枚
+                </button>
+              </td>
+              <td>
+                <span class="text-amber-600 font-bold">⚠</span>
+              </td>
+            </tr>
+
+            <!-- 項目3: 擁壁 (完了) -->
+            <tr class="row-completed">
+              <td>3</td>
+              <td class="item-name">
+                擁壁<br>
+                <span class="text-xs text-gray-500">□有 □無</span>
+              </td>
+              <td class="content">擁壁の劣化及び損傷の有無</td>
+              <td>
+                <div class="flex flex-col gap-1 items-start px-2">
+                  <label class="flex items-center gap-1 text-xs cursor-pointer">
+                    <input type="checkbox" class="custom-checkbox" checked> 目視
+                  </label>
+                  <label class="flex items-center gap-1 text-xs cursor-pointer">
+                    <input type="checkbox" class="custom-checkbox"> 計測
+                  </label>
+                  <label class="flex items-center gap-1 text-xs cursor-pointer">
+                    <input type="checkbox" class="custom-checkbox"> 触診
+                  </label>
+                </div>
+              </td>
+              <td>
+                <div class="flex justify-center gap-2">
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval3" class="custom-radio radio-a">
+                    <span class="text-xs eval-a mt-1">a</span>
+                  </label>
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval3" class="custom-radio radio-b1" checked>
+                    <span class="text-xs eval-b1 mt-1">b1</span>
+                  </label>
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval3" class="custom-radio radio-b2">
+                    <span class="text-xs eval-b2 mt-1">b2</span>
+                  </label>
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval3" class="custom-radio radio-c">
+                    <span class="text-xs eval-c mt-1">c</span>
+                  </label>
+                </div>
+              </td>
+              <td>
+                <span class="text-gray-400 text-sm">-</span>
+              </td>
+              <td>
+                <span class="text-emerald-600 font-bold">✓</span>
+              </td>
+            </tr>
+
+            <!-- 項目4: 擁壁の水抜きパイプ (未入力) -->
+            <tr>
+              <td>4</td>
+              <td class="item-name">（擁壁の水抜きパイプ）</td>
+              <td class="content">擁壁の水抜きパイプの維持保全の有無</td>
+              <td>
+                <div class="flex flex-col gap-1 items-start px-2">
+                  <label class="flex items-center gap-1 text-xs cursor-pointer">
+                    <input type="checkbox" class="custom-checkbox"> 目視
+                  </label>
+                  <label class="flex items-center gap-1 text-xs cursor-pointer">
+                    <input type="checkbox" class="custom-checkbox"> 計測
+                  </label>
+                  <label class="flex items-center gap-1 text-xs cursor-pointer">
+                    <input type="checkbox" class="custom-checkbox"> 触診
+                  </label>
+                </div>
+              </td>
+              <td>
+                <div class="flex justify-center gap-2">
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval4" class="custom-radio radio-a">
+                    <span class="text-xs eval-a mt-1">a</span>
+                  </label>
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval4" class="custom-radio radio-b1">
+                    <span class="text-xs eval-b1 mt-1">b1</span>
+                  </label>
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval4" class="custom-radio radio-b2">
+                    <span class="text-xs eval-b2 mt-1">b2</span>
+                  </label>
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval4" class="custom-radio radio-c">
+                    <span class="text-xs eval-c mt-1">c</span>
+                  </label>
+                </div>
+              </td>
+              <td>
+                <span class="text-gray-400 text-sm">-</span>
+              </td>
+              <td>
+                <span class="text-gray-400">-</span>
+              </td>
+            </tr>
+
+            <!-- 項目5: 駐車場 (未入力) -->
+            <tr>
+              <td>5</td>
+              <td class="item-name">
+                駐車場<br>
+                <span class="text-xs text-gray-500">□有 □無</span>
+              </td>
+              <td class="content">駐車場内のひび割れ、陥没の恐れの有無</td>
+              <td>
+                <div class="flex flex-col gap-1 items-start px-2">
+                  <label class="flex items-center gap-1 text-xs cursor-pointer">
+                    <input type="checkbox" class="custom-checkbox"> 目視
+                  </label>
+                  <label class="flex items-center gap-1 text-xs cursor-pointer">
+                    <input type="checkbox" class="custom-checkbox"> 計測
+                  </label>
+                  <label class="flex items-center gap-1 text-xs cursor-pointer">
+                    <input type="checkbox" class="custom-checkbox"> 触診
+                  </label>
+                </div>
+              </td>
+              <td>
+                <div class="flex justify-center gap-2">
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval5" class="custom-radio radio-a">
+                    <span class="text-xs eval-a mt-1">a</span>
+                  </label>
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval5" class="custom-radio radio-b1">
+                    <span class="text-xs eval-b1 mt-1">b1</span>
+                  </label>
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval5" class="custom-radio radio-b2">
+                    <span class="text-xs eval-b2 mt-1">b2</span>
+                  </label>
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval5" class="custom-radio radio-c">
+                    <span class="text-xs eval-c mt-1">c</span>
+                  </label>
+                </div>
+              </td>
+              <td>
+                <span class="text-gray-400 text-sm">-</span>
+              </td>
+              <td>
+                <span class="text-gray-400">-</span>
+              </td>
+            </tr>
+
+            <!-- 項目6: 駐輪場 -->
+            <tr>
+              <td>6</td>
+              <td class="item-name">
+                駐輪場<br>
+                <span class="text-xs text-gray-500">□有 □無</span>
+              </td>
+              <td class="content">駐輪場内のひび割れ、陥没の恐れの有無</td>
+              <td>
+                <div class="flex flex-col gap-1 items-start px-2">
+                  <label class="flex items-center gap-1 text-xs cursor-pointer">
+                    <input type="checkbox" class="custom-checkbox"> 目視
+                  </label>
+                  <label class="flex items-center gap-1 text-xs cursor-pointer">
+                    <input type="checkbox" class="custom-checkbox"> 計測
+                  </label>
+                  <label class="flex items-center gap-1 text-xs cursor-pointer">
+                    <input type="checkbox" class="custom-checkbox"> 触診
+                  </label>
+                </div>
+              </td>
+              <td>
+                <div class="flex justify-center gap-2">
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval6" class="custom-radio radio-a">
+                    <span class="text-xs eval-a mt-1">a</span>
+                  </label>
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval6" class="custom-radio radio-b1">
+                    <span class="text-xs eval-b1 mt-1">b1</span>
+                  </label>
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval6" class="custom-radio radio-b2">
+                    <span class="text-xs eval-b2 mt-1">b2</span>
+                  </label>
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval6" class="custom-radio radio-c">
+                    <span class="text-xs eval-c mt-1">c</span>
+                  </label>
+                </div>
+              </td>
+              <td>
+                <span class="text-gray-400 text-sm">-</span>
+              </td>
+              <td>
+                <span class="text-gray-400">-</span>
+              </td>
+            </tr>
+
+            <!-- 項目7: 建物の周囲 -->
+            <tr>
+              <td>7</td>
+              <td class="item-name">建物の周囲</td>
+              <td class="content">隣接建物の倒壊、接触の恐れの有無</td>
+              <td>
+                <div class="flex flex-col gap-1 items-start px-2">
+                  <label class="flex items-center gap-1 text-xs cursor-pointer">
+                    <input type="checkbox" class="custom-checkbox"> 目視
+                  </label>
+                  <label class="flex items-center gap-1 text-xs cursor-pointer">
+                    <input type="checkbox" class="custom-checkbox"> 計測
+                  </label>
+                  <label class="flex items-center gap-1 text-xs cursor-pointer">
+                    <input type="checkbox" class="custom-checkbox"> 触診
+                  </label>
+                </div>
+              </td>
+              <td>
+                <div class="flex justify-center gap-2">
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval7" class="custom-radio radio-a">
+                    <span class="text-xs eval-a mt-1">a</span>
+                  </label>
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval7" class="custom-radio radio-b1">
+                    <span class="text-xs eval-b1 mt-1">b1</span>
+                  </label>
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval7" class="custom-radio radio-b2">
+                    <span class="text-xs eval-b2 mt-1">b2</span>
+                  </label>
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval7" class="custom-radio radio-c">
+                    <span class="text-xs eval-c mt-1">c</span>
+                  </label>
+                </div>
+              </td>
+              <td>
+                <span class="text-gray-400 text-sm">-</span>
+              </td>
+              <td>
+                <span class="text-gray-400">-</span>
+              </td>
+            </tr>
+
+            <!-- カテゴリヘッダー: 外部② -->
+            <tr>
+              <td colspan="7" class="category-header">
+                <span class="text-blue-800">外部② 建物外部</span>
+              </td>
+            </tr>
+
+            <!-- 項目8: 基礎 -->
+            <tr>
+              <td>8</td>
+              <td class="item-name">基礎</td>
+              <td class="content">コンクリートの著しいひび割れ・欠損の有無</td>
+              <td>
+                <div class="flex flex-col gap-1 items-start px-2">
+                  <label class="flex items-center gap-1 text-xs cursor-pointer">
+                    <input type="checkbox" class="custom-checkbox"> 目視
+                  </label>
+                  <label class="flex items-center gap-1 text-xs cursor-pointer">
+                    <input type="checkbox" class="custom-checkbox"> 計測
+                  </label>
+                  <label class="flex items-center gap-1 text-xs cursor-pointer">
+                    <input type="checkbox" class="custom-checkbox"> 触診
+                  </label>
+                </div>
+              </td>
+              <td>
+                <div class="flex justify-center gap-2">
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval8" class="custom-radio radio-a">
+                    <span class="text-xs eval-a mt-1">a</span>
+                  </label>
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval8" class="custom-radio radio-b1">
+                    <span class="text-xs eval-b1 mt-1">b1</span>
+                  </label>
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval8" class="custom-radio radio-b2">
+                    <span class="text-xs eval-b2 mt-1">b2</span>
+                  </label>
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval8" class="custom-radio radio-c">
+                    <span class="text-xs eval-c mt-1">c</span>
+                  </label>
+                </div>
+              </td>
+              <td>
+                <span class="text-gray-400 text-sm">-</span>
+              </td>
+              <td>
+                <span class="text-gray-400">-</span>
+              </td>
+            </tr>
+
+            <!-- 項目9: 外壁 -->
+            <tr>
+              <td>9</td>
+              <td class="item-name">外壁（タイル等）</td>
+              <td class="content">タイル・モルタル等の著しい浮き・剥落の有無</td>
+              <td>
+                <div class="flex flex-col gap-1 items-start px-2">
+                  <label class="flex items-center gap-1 text-xs cursor-pointer">
+                    <input type="checkbox" class="custom-checkbox"> 目視
+                  </label>
+                  <label class="flex items-center gap-1 text-xs cursor-pointer">
+                    <input type="checkbox" class="custom-checkbox"> 計測
+                  </label>
+                  <label class="flex items-center gap-1 text-xs cursor-pointer">
+                    <input type="checkbox" class="custom-checkbox"> 触診
+                  </label>
+                </div>
+              </td>
+              <td>
+                <div class="flex justify-center gap-2">
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval9" class="custom-radio radio-a">
+                    <span class="text-xs eval-a mt-1">a</span>
+                  </label>
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval9" class="custom-radio radio-b1">
+                    <span class="text-xs eval-b1 mt-1">b1</span>
+                  </label>
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval9" class="custom-radio radio-b2">
+                    <span class="text-xs eval-b2 mt-1">b2</span>
+                  </label>
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval9" class="custom-radio radio-c">
+                    <span class="text-xs eval-c mt-1">c</span>
+                  </label>
+                </div>
+              </td>
+              <td>
+                <span class="text-gray-400 text-sm">-</span>
+              </td>
+              <td>
+                <span class="text-gray-400">-</span>
+              </td>
+            </tr>
+
+            <!-- 項目10: 屋根 -->
+            <tr>
+              <td>10</td>
+              <td class="item-name">屋根</td>
+              <td class="content">屋根材の著しい剥落・ずれ・浮きの有無</td>
+              <td>
+                <div class="flex flex-col gap-1 items-start px-2">
+                  <label class="flex items-center gap-1 text-xs cursor-pointer">
+                    <input type="checkbox" class="custom-checkbox"> 目視
+                  </label>
+                  <label class="flex items-center gap-1 text-xs cursor-pointer">
+                    <input type="checkbox" class="custom-checkbox"> 計測
+                  </label>
+                  <label class="flex items-center gap-1 text-xs cursor-pointer">
+                    <input type="checkbox" class="custom-checkbox"> 触診
+                  </label>
+                </div>
+              </td>
+              <td>
+                <div class="flex justify-center gap-2">
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval10" class="custom-radio radio-a">
+                    <span class="text-xs eval-a mt-1">a</span>
+                  </label>
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval10" class="custom-radio radio-b1">
+                    <span class="text-xs eval-b1 mt-1">b1</span>
+                  </label>
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval10" class="custom-radio radio-b2">
+                    <span class="text-xs eval-b2 mt-1">b2</span>
+                  </label>
+                  <label class="flex flex-col items-center cursor-pointer">
+                    <input type="radio" name="eval10" class="custom-radio radio-c">
+                    <span class="text-xs eval-c mt-1">c</span>
+                  </label>
+                </div>
+              </td>
+              <td>
+                <span class="text-gray-400 text-sm">-</span>
+              </td>
+              <td>
+                <span class="text-gray-400">-</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 凡例 -->
+    <div class="mt-6 bg-white rounded-xl shadow-lg p-4">
+      <h3 class="font-bold text-gray-800 mb-3">評価の凡例</h3>
+      <div class="flex flex-wrap gap-6 text-sm">
+        <div class="flex items-center gap-2">
+          <span class="w-4 h-4 rounded-full bg-green-500"></span>
+          <span><strong class="eval-a">a</strong>: 問題なし</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="w-4 h-4 rounded-full bg-blue-500"></span>
+          <span><strong class="eval-b1">b1</strong>: 軽微な劣化（経過観察）</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="w-4 h-4 rounded-full bg-amber-500"></span>
+          <span><strong class="eval-b2">b2</strong>: 要補修（写真撮影必要）</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="w-4 h-4 rounded-full bg-red-500"></span>
+          <span><strong class="eval-c">c</strong>: 著しい劣化（写真撮影必要）</span>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- 写真撮影モーダル（b2/c選択時に表示） -->
+  <div id="photoModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+    <div class="bg-white rounded-xl p-6 max-w-md w-full mx-4">
+      <h3 class="text-xl font-bold mb-4">📷 写真撮影</h3>
+      <p class="text-gray-600 mb-4">
+        <strong class="text-amber-600">b2</strong> または <strong class="text-red-600">c</strong> を選択したため、写真撮影が必要です。
+      </p>
+      <div class="flex gap-3">
+        <button class="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-semibold hover:bg-emerald-700 transition">
+          撮影する
+        </button>
+        <button onclick="document.getElementById('photoModal').classList.add('hidden')" 
+                class="flex-1 border-2 border-gray-300 text-gray-600 py-3 rounded-xl font-semibold hover:bg-gray-100 transition">
+          後で撮影
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // b2/c選択時にモーダル表示（デモ用）
+    document.querySelectorAll('.radio-b2, .radio-c').forEach(radio => {
+      radio.addEventListener('change', function() {
+        if (this.checked) {
+          document.getElementById('photoModal').classList.remove('hidden');
+        }
+      });
+    });
+  </script>
+</body>
+</html>

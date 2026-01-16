@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>方位設定 - パターン3: ジェスチャー特化型</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    * { touch-action: none; }
+    
+    .compass-needle {
+      transition: transform 0.1s ease-out;
+    }
+    
+    .hint-badge {
+      animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 0.8; }
+      50% { opacity: 1; }
+    }
+    
+    .gesture-guide {
+      animation: fadeIn 0.5s ease-out;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.9); }
+      to { opacity: 1; transform: scale(1); }
+    }
+  </style>
+</head>
+<body class="bg-slate-900 h-screen overflow-hidden">
+  <div class="h-full relative">
+    <!-- 図面エリア（全画面） -->
+    <div class="absolute inset-0 bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center" id="canvas">
+      <span class="text-slate-500">図面プレビュー</span>
+      
+      <!-- コンパスアイコン -->
+      <div id="compass" class="absolute" style="top: 15%; left: 50%; transform: translate(-50%, -50%);">
+        <img src="houi.png" id="compassImg" width="80" height="80" class="compass-needle" style="transform: rotate(0deg);" alt="方位">
+      </div>
+    </div>
+
+    <!-- ヘッダー -->
+    <div class="absolute top-0 left-0 right-0 p-3 flex justify-between items-start">
+      <button onclick="history.back()" class="bg-black/60 text-white px-3 py-2 rounded-xl text-sm backdrop-blur-sm">
+        ← 戻る
+      </button>
+      
+      <!-- 角度表示 -->
+      <div class="bg-black/60 text-white px-4 py-2 rounded-xl backdrop-blur-sm text-center">
+        <div class="text-2xl font-bold" id="angleDisplay">北 0°</div>
+        <div class="text-xs text-slate-300" id="scaleDisplay">サイズ: 100%</div>
+      </div>
+      
+      <button onclick="save()" class="bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-bold">
+        確定
+      </button>
+    </div>
+
+    <!-- ジェスチャーヒント -->
+    <div class="absolute bottom-24 left-0 right-0 flex justify-center" id="gestureHint">
+      <div class="hint-badge bg-black/60 text-white px-4 py-2 rounded-full text-sm backdrop-blur-sm flex items-center gap-3">
+        <span>👆 タップ:回転</span>
+        <span class="text-slate-400">|</span>
+        <span>✌️ 2本指:移動</span>
+        <span class="text-slate-400">|</span>
+        <span>🤏 ピンチ:拡縮</span>
+      </div>
+    </div>
+
+    <!-- プリセットボタン（下部フローティング） -->
+    <div class="absolute bottom-4 left-4 right-4">
+      <div class="bg-black/60 backdrop-blur-sm rounded-2xl p-3">
+        <div class="grid grid-cols-4 gap-2">
+          <button onclick="setAngle(0)" class="preset py-3 rounded-xl text-sm font-bold bg-red-500 text-white">北</button>
+          <button onclick="setAngle(90)" class="preset py-3 rounded-xl text-sm font-bold bg-white/20 text-white">東</button>
+          <button onclick="setAngle(180)" class="preset py-3 rounded-xl text-sm font-bold bg-white/20 text-white">南</button>
+          <button onclick="setAngle(270)" class="preset py-3 rounded-xl text-sm font-bold bg-white/20 text-white">西</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ジェスチャーガイド（初回表示） -->
+    <div id="gestureGuide" class="gesture-guide absolute inset-0 bg-black/80 flex items-center justify-center z-50">
+      <div class="bg-slate-800 rounded-2xl p-6 mx-4 max-w-sm">
+        <h2 class="text-white text-xl font-bold mb-4 text-center">操作方法</h2>
+        
+        <div class="space-y-4 text-white">
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 bg-emerald-600/30 rounded-xl flex items-center justify-center text-2xl">👆</div>
+            <div>
+              <div class="font-bold">タップ&ドラッグ</div>
+              <div class="text-sm text-slate-400">コンパスの周りをドラッグして回転</div>
+            </div>
+          </div>
+          
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 bg-blue-600/30 rounded-xl flex items-center justify-center text-2xl">✌️</div>
+            <div>
+              <div class="font-bold">2本指ドラッグ</div>
+              <div class="text-sm text-slate-400">コンパスの位置を移動</div>
+            </div>
+          </div>
+          
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 bg-purple-600/30 rounded-xl flex items-center justify-center text-2xl">🤏</div>
+            <div>
+              <div class="font-bold">ピンチイン/アウト</div>
+              <div class="text-sm text-slate-400">コンパスのサイズを調整</div>
+            </div>
+          </div>
+        </div>
+        
+        <button onclick="closeGuide()" class="w-full mt-6 bg-emerald-600 text-white py-3 rounded-xl font-bold">
+          はじめる
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let angle = 0;
+    let scale = 1.0;
+    let compassX = 50;
+    let compassY = 15;
+    
+    // タッチ状態
+    let touchState = {
+      startAngle: 0,
+      startScale: 1,
+      startX: 0,
+      startY: 0,
+      compassStartX: 0,
+      compassStartY: 0,
+      initialDistance: 0,
+      isTwoFinger: false
+    };
+
+    function setAngle(newAngle) {
+      angle = parseInt(newAngle) % 360;
+      if (angle < 0) angle += 360;
+      
+      document.getElementById('compassImg').style.transform = `rotate(${angle}deg) scale(${scale})`;
+      
+      const directions = { 0: '北', 90: '東', 180: '南', 270: '西' };
+      const dir = directions[angle] || `${angle}°`;
+      document.getElementById('angleDisplay').textContent = `${dir} ${angle}°`;
+      
+      // プリセットボタン更新
+      document.querySelectorAll('.preset').forEach((btn, i) => {
+        const angles = [0, 90, 180, 270];
+        btn.className = angles[i] === angle 
+          ? 'preset py-3 rounded-xl text-sm font-bold bg-red-500 text-white'
+          : 'preset py-3 rounded-xl text-sm font-bold bg-white/20 text-white';
+      });
+    }
+
+    function updateCompassPosition() {
+      const compass = document.getElementById('compass');
+      compass.style.left = `${compassX}%`;
+      compass.style.top = `${compassY}%`;
+    }
+
+    function updateScale() {
+      document.getElementById('compassImg').style.transform = `rotate(${angle}deg) scale(${scale})`;
+      document.getElementById('scaleDisplay').textContent = `サイズ: ${Math.round(scale * 100)}%`;
+    }
+
+    function closeGuide() {
+      document.getElementById('gestureGuide').style.display = 'none';
+      localStorage.setItem('orientationGuideShown', 'true');
+    }
+
+    function save() {
+      alert(`保存しました\n角度: ${angle}°\n位置: (${Math.round(compassX)}%, ${Math.round(compassY)}%)\nサイズ: ${Math.round(scale * 100)}%`);
+    }
+
+    // 初回ガイド表示チェック
+    if (localStorage.getItem('orientationGuideShown')) {
+      document.getElementById('gestureGuide').style.display = 'none';
+    }
+
+    // タッチイベント
+    const canvas = document.getElementById('canvas');
+    const compass = document.getElementById('compass');
+
+    canvas.addEventListener('touchstart', (e) => {
+      const touches = e.touches;
+      
+      if (touches.length === 2) {
+        // 2本指: 移動 or ピンチ
+        touchState.isTwoFinger = true;
+        touchState.compassStartX = compassX;
+        touchState.compassStartY = compassY;
+        touchState.startX = (touches[0].clientX + touches[1].clientX) / 2;
+        touchState.startY = (touches[0].clientY + touches[1].clientY) / 2;
+        
+        const dx = touches[1].clientX - touches[0].clientX;
+        const dy = touches[1].clientY - touches[0].clientY;
+        touchState.initialDistance = Math.sqrt(dx * dx + dy * dy);
+        touchState.startScale = scale;
+      } else {
+        // 1本指: 回転
+        touchState.isTwoFinger = false;
+        const rect = compass.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        
+        const dx = touches[0].clientX - centerX;
+        const dy = touches[0].clientY - centerY;
+        touchState.startAngle = Math.atan2(dx, -dy) * (180 / Math.PI);
+      }
+      
+      e.preventDefault();
+    });
+
+    canvas.addEventListener('touchmove', (e) => {
+      const touches = e.touches;
+      
+      if (touches.length === 2 && touchState.isTwoFinger) {
+        // ピンチでサイズ調整
+        const dx = touches[1].clientX - touches[0].clientX;
+        const dy = touches[1].clientY - touches[0].clientY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        const scaleRatio = distance / touchState.initialDistance;
+        scale = Math.max(0.5, Math.min(2.0, touchState.startScale * scaleRatio));
+        updateScale();
+        
+        // 2本指ドラッグで移動
+        const currentX = (touches[0].clientX + touches[1].clientX) / 2;
+        const currentY = (touches[0].clientY + touches[1].clientY) / 2;
+        
+        const rect = canvas.getBoundingClientRect();
+        const deltaX = ((currentX - touchState.startX) / rect.width) * 100;
+        const deltaY = ((currentY - touchState.startY) / rect.height) * 100;
+        
+        compassX = Math.max(10, Math.min(90, touchState.compassStartX + deltaX));
+        compassY = Math.max(10, Math.min(90, touchState.compassStartY + deltaY));
+        updateCompassPosition();
+        
+      } else if (touches.length === 1 && !touchState.isTwoFinger) {
+        // 1本指で回転
+        const rect = compass.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        
+        const dx = touches[0].clientX - centerX;
+        const dy = touches[0].clientY - centerY;
+        
+        // 中心から一定距離以上の場合のみ
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance > 30) {
+          let newAngle = Math.atan2(dx, -dy) * (180 / Math.PI);
+          if (newAngle < 0) newAngle += 360;
+          newAngle = Math.round(newAngle / 5) * 5;
+          setAngle(newAngle);
+        }
+      }
+      
+      e.preventDefault();
+    });
+
+    canvas.addEventListener('touchend', () => {
+      touchState.isTwoFinger = false;
+    });
+  </script>
+</body>
+</html>

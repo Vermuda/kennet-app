@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { loadData, updateData } from '../storage/localStorage';
 import { generateId } from '../utils/helpers';
 import { inspectionCategories, inspectionResultLabels } from '../utils/categoryData';
+import ReferencePhotoButton from '../components/ReferencePhotoButton';
 import type { Marker, Inspection, InspectionResult } from '../types';
 
 const InspectionInputPage: React.FC = () => {
@@ -18,9 +19,21 @@ const InspectionInputPage: React.FC = () => {
   const [middleCategory, setMiddleCategory] = useState('');
   const [minorCategory, setMinorCategory] = useState('');
   const [result, setResult] = useState<InspectionResult | ''>('');
+  const [propertyId, setPropertyId] = useState<string | null>(null);
 
   const middleOptions = majorCategory ? inspectionCategories.middle[majorCategory] || [] : [];
   const minorOptions = middleCategory ? inspectionCategories.minor[middleCategory] || [] : [];
+
+  useEffect(() => {
+    const data = loadData();
+    const blueprint = data.blueprints.find((b) => b.id === blueprintId);
+    if (blueprint) {
+      const floor = data.floors.find((f) => f.id === blueprint.floorId);
+      if (floor) {
+        setPropertyId(floor.propertyId);
+      }
+    }
+  }, [blueprintId]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,6 +78,7 @@ const InspectionInputPage: React.FC = () => {
         state: {
           inspectionId: inspection.id,
           blueprintId,
+          returnPath: `/blueprints/${blueprintId}`,
         },
       });
     } else {
@@ -79,14 +93,16 @@ const InspectionInputPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <h1 className="text-2xl font-bold text-gray-800">検査情報入力</h1>
+      <header className="bg-gray-800 text-white shadow flex-shrink-0">
+        <div className="px-3 py-2 flex items-center justify-between gap-2">
+          <div className="w-12"></div>
+          <h1 className="text-sm font-bold whitespace-nowrap">検査情報入力</h1>
+          <div className="w-12"></div>
         </div>
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-8">
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="bg-white rounded-xl shadow-md p-6">
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -99,7 +115,7 @@ const InspectionInputPage: React.FC = () => {
                   setMiddleCategory('');
                   setMinorCategory('');
                 }}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500"
                 required
               >
                 <option value="">選択してください</option>
@@ -121,7 +137,7 @@ const InspectionInputPage: React.FC = () => {
                   setMiddleCategory(e.target.value);
                   setMinorCategory('');
                 }}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500"
                 disabled={!majorCategory}
                 required
               >
@@ -141,7 +157,7 @@ const InspectionInputPage: React.FC = () => {
               <select
                 value={minorCategory}
                 onChange={(e) => setMinorCategory(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500"
                 disabled={!middleCategory}
                 required
               >
@@ -162,9 +178,9 @@ const InspectionInputPage: React.FC = () => {
                 {(Object.keys(inspectionResultLabels) as InspectionResult[]).map((key) => (
                   <label
                     key={key}
-                    className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition ${
+                    className={`flex items-center p-4 border-2 rounded-xl cursor-pointer transition ${
                       result === key
-                        ? 'border-blue-500 bg-blue-50'
+                        ? 'border-emerald-500 bg-emerald-50'
                         : 'border-gray-200 hover:border-gray-300'
                     }`}
                   >
@@ -191,14 +207,14 @@ const InspectionInputPage: React.FC = () => {
             <div className="flex gap-3 pt-4">
               <button
                 type="submit"
-                className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700"
+                className="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-semibold hover:bg-emerald-700 transition-all duration-300 ease-out transform hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl"
               >
                 確定
               </button>
               <button
                 type="button"
                 onClick={handleCancel}
-                className="flex-1 bg-gray-300 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-400"
+                className="flex-1 border-2 border-slate-600 text-slate-600 py-3 rounded-xl font-semibold hover:bg-slate-700 hover:text-white hover:border-slate-700 transition-all duration-300 ease-out transform hover:scale-105 active:scale-95"
               >
                 キャンセル
               </button>
@@ -206,6 +222,9 @@ const InspectionInputPage: React.FC = () => {
           </form>
         </div>
       </main>
+
+      {/* 通常撮影ボタン */}
+      {propertyId && <ReferencePhotoButton propertyId={propertyId} />}
     </div>
   );
 };

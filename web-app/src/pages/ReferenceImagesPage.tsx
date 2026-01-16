@@ -20,13 +20,13 @@ const ReferenceImagesPage: React.FC = () => {
     const floor = data.floors.find((f) => f.id === blueprintData.floorId);
     if (!floor) return;
 
-    // この物件の参考画像を取得
+    // この物件の通常撮影を取得
     const images = data.referenceImages.filter((img) => img.propertyId === floor.propertyId);
     setReferenceImages(images);
   }, [blueprintId, navigate]);
 
   const handleDeleteImage = (imageId: string) => {
-    if (window.confirm('この参考画像を削除してもよろしいですか？')) {
+    if (window.confirm('この通常撮影を削除してもよろしいですか？')) {
       const data = loadData();
       const updatedImages = data.referenceImages.filter((img) => img.id !== imageId);
       updateData('referenceImages', updatedImages);
@@ -53,15 +53,16 @@ const ReferenceImagesPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center gap-4">
+      <header className="bg-gray-800 text-white shadow flex-shrink-0">
+        <div className="px-3 py-2 flex items-center justify-between gap-2">
           <button
             onClick={() => navigate(`/blueprints/${blueprintId}`)}
-            className="text-gray-600 hover:text-gray-800"
+            className="px-2 py-1 border border-white text-white rounded text-xs font-medium hover:bg-white hover:text-slate-900 transition-all whitespace-nowrap"
           >
             ← 戻る
           </button>
-          <h1 className="text-2xl font-bold text-gray-800">参考画像一覧</h1>
+          <h1 className="text-sm font-bold whitespace-nowrap">通常撮影一覧</h1>
+          <div className="w-12"></div>
         </div>
       </header>
 
@@ -71,13 +72,13 @@ const ReferenceImagesPage: React.FC = () => {
             {referenceImages.map((image) => (
               <div
                 key={image.id}
-                className="bg-white rounded-lg shadow overflow-hidden cursor-pointer hover:shadow-lg transition"
+                className="bg-white rounded-xl shadow-md overflow-hidden cursor-pointer hover:shadow-xl transition"
                 onClick={() => setSelectedImage(image)}
               >
                 <div className="aspect-square bg-gray-200">
                   <img
                     src={image.imageData}
-                    alt="参考画像"
+                    alt="通常撮影"
                     className="w-full h-full object-cover"
                   />
                 </div>
@@ -93,8 +94,8 @@ const ReferenceImagesPage: React.FC = () => {
             ))}
           </div>
         ) : (
-          <div className="bg-white rounded-lg shadow p-12 text-center text-gray-500">
-            参考画像が登録されていません
+          <div className="bg-white rounded-xl shadow-md p-12 text-center text-gray-500">
+            通常撮影が登録されていません
           </div>
         )}
       </main>
@@ -106,14 +107,14 @@ const ReferenceImagesPage: React.FC = () => {
           onClick={() => setSelectedImage(null)}
         >
           <div
-            className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-auto"
+            className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-6">
               <img
                 src={selectedImage.imageData}
-                alt="参考画像"
-                className="w-full h-auto rounded-lg mb-4"
+                alt="通常撮影"
+                className="w-full h-auto rounded-xl mb-4"
               />
               
               <div className="mb-4">
@@ -125,7 +126,7 @@ const ReferenceImagesPage: React.FC = () => {
                   onChange={(e) =>
                     handleUpdateMemo(selectedImage.id, e.target.value)
                   }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500"
                   rows={3}
                   placeholder="メモを入力"
                 />
@@ -138,13 +139,13 @@ const ReferenceImagesPage: React.FC = () => {
               <div className="flex gap-3">
                 <button
                   onClick={() => handleDeleteImage(selectedImage.id)}
-                  className="flex-1 bg-red-600 text-white py-2 rounded-lg hover:bg-red-700"
+                  className="flex-1 bg-red-600 text-white py-2 rounded-xl hover:bg-red-700"
                 >
                   削除
                 </button>
                 <button
                   onClick={() => setSelectedImage(null)}
-                  className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400"
+                  className="flex-1 border-2 border-slate-600 text-slate-600 py-2 rounded-xl hover:bg-slate-700 hover:text-white hover:border-slate-700 transition-all duration-300 ease-out transform hover:scale-105 active:scale-95"
                 >
                   閉じる
                 </button>

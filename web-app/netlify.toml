@@ -1,0 +1,18 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[context.production]
+  command = "npm run build"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Basic-Auth = "kennet2025:Kennet@2025!Secure"
+
+# SPAのルーティング設定
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+

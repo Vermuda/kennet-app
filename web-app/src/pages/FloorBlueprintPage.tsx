@@ -3,12 +3,14 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { loadData, updateData, logStorageUsage, getStorageWarningLevel } from '../storage/localStorage';
 import { generateId, convertImageToBase64 } from '../utils/helpers';
 import { compressImage, formatSize, getBase64Size } from '../utils/imageCompression';
+import ReferencePhotoButton from '../components/ReferencePhotoButton';
 import type { Floor, Blueprint } from '../types';
 
 const FloorBlueprintPage: React.FC = () => {
   const { floorId } = useParams<{ floorId: string }>();
   const [floor, setFloor] = useState<Floor | null>(null);
   const [blueprints, setBlueprints] = useState<Blueprint[]>([]);
+  const [propertyId, setPropertyId] = useState<string | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -19,10 +21,20 @@ const FloorBlueprintPage: React.FC = () => {
       return;
     }
     setFloor(floorData);
+    setPropertyId(floorData.propertyId);
 
     const floorBlueprints = data.blueprints.filter((b) => b.floorId === floorId);
     setBlueprints(floorBlueprints);
   }, [floorId, navigate]);
+
+  // 検査入力画面へ遷移
+  const handleStartInspection = () => {
+    if (propertyId) {
+      navigate(`/properties/${propertyId}/inspection-checklist`, {
+        state: { fromFloor: floorId },
+      });
+    }
+  };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -82,9 +94,14 @@ const FloorBlueprintPage: React.FC = () => {
       const updatedBlueprints = [...data.blueprints, newBlueprint];
       updateData('blueprints', updatedBlueprints);
       setBlueprints([...blueprints, newBlueprint]);
-      
+
       // 完了後の使用状況をログ
       logStorageUsage();
+
+      // 方位設定ページへ遷移
+      navigate(`/blueprints/${newBlueprint.id}/orientation`, {
+        state: { fromUpload: true },
+      });
     } catch (error) {
       console.error('Failed to load image:', error);
       alert('画像の読み込みまたは圧縮に失敗しました');
@@ -128,26 +145,52 @@ const FloorBlueprintPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center gap-4">
-          <button onClick={goBack} className="text-gray-600 hover:text-gray-800">
+      <header className="bg-gray-800 text-white shadow flex-shrink-0">
+        <div className="px-3 py-2 flex items-center justify-between gap-2">
+          <button
+            onClick={goBack}
+            className="px-2 py-1 border border-white text-white rounded text-xs font-medium hover:bg-white hover:text-slate-900 transition-all whitespace-nowrap"
+          >
             ← 戻る
           </button>
-          <h1 className="text-2xl font-bold text-gray-800">{floor.name} - 図面管理</h1>
+          <h1 className="text-sm font-bold whitespace-nowrap">{floor.name} - 図面管理</h1>
+          <div className="w-12"></div>
         </div>
       </header>
 
+      {/* 通常撮影ボタン */}
+      <ReferencePhotoButton propertyId={floor.propertyId} />
+
       <main className="max-w-7xl mx-auto px-4 py-8">
-        <div className="mb-6">
-          <label className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition duration-200 cursor-pointer inline-block">
-            + 図面を追加
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handleFileSelect}
-              className="hidden"
-            />
-          </label>
+        <div className="mb-6 flex items-center gap-4 flex-wrap">
+          {/* 図面は1つだけ登録可能 - 0個の場合のみ追加ボタンを表示 */}
+          {blueprints.length === 0 && (
+            <label className="bg-emerald-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-emerald-700 transition-all duration-300 ease-out transform hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl cursor-pointer inline-block">
+              + 図面を追加
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+            </label>
+          )}
+          {blueprints.length > 0 && (
+            <button
+              onClick={handleStartInspection}
+              className="bg-blue-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-blue-700 transition-all duration-300 ease-out transform hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl flex items-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+              </svg>
+              検査入力
+            </button>
+          )}
+          {blueprints.length === 0 && (
+            <span className="text-red-600 text-sm font-medium">
+              ※ 推奨解像度: 1920×1080px以下（自動で圧縮されます）
+            </span>
+          )}
         </div>
 
         {blueprints.length > 0 ? (
@@ -155,7 +198,7 @@ const FloorBlueprintPage: React.FC = () => {
             {blueprints.map((blueprint) => (
               <div
                 key={blueprint.id}
-                className="bg-white rounded-lg shadow hover:shadow-lg transition duration-200 overflow-hidden"
+                className="bg-white rounded-xl shadow-md hover:shadow-xl transition duration-200 overflow-hidden"
               >
                 <div className="aspect-video bg-gray-200 relative">
                   <img
@@ -171,13 +214,13 @@ const FloorBlueprintPage: React.FC = () => {
                   <div className="flex gap-2">
                     <button
                       onClick={() => handleViewBlueprint(blueprint.id)}
-                      className="flex-1 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                      className="flex-1 bg-emerald-600 text-white px-4 py-2 rounded-xl hover:bg-emerald-700 transition-all duration-300 ease-out transform hover:scale-105 active:scale-95"
                     >
                       開く
                     </button>
                     <button
                       onClick={() => handleDeleteBlueprint(blueprint.id)}
-                      className="px-4 py-2 border border-red-500 text-red-500 rounded hover:bg-red-50"
+                      className="px-4 py-2 border-2 border-red-600 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all duration-300 ease-out transform hover:scale-105 active:scale-95"
                     >
                       削除
                     </button>
@@ -187,7 +230,7 @@ const FloorBlueprintPage: React.FC = () => {
             ))}
           </div>
         ) : (
-          <div className="bg-white rounded-lg shadow p-12 text-center text-gray-500">
+          <div className="bg-white rounded-xl shadow-md p-12 text-center text-gray-500">
             図面が登録されていません。図面を追加してください。
           </div>
         )}

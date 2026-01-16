@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>方位設定 - パターン1: ボトムシート型</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    * { touch-action: manipulation; }
+    
+    .bottom-sheet {
+      transition: transform 0.3s ease-out;
+    }
+    
+    .compass {
+      transition: transform 0.2s ease-out;
+    }
+    
+    .tab-active {
+      background: linear-gradient(135deg, #059669, #10b981);
+      color: white;
+    }
+  </style>
+</head>
+<body class="bg-slate-900 h-screen overflow-hidden">
+  <div class="h-full flex flex-col">
+    <!-- ヘッダー（最小限） -->
+    <header class="bg-slate-800 px-4 py-2 flex items-center justify-between flex-shrink-0">
+      <button onclick="history.back()" class="text-white text-sm">← 戻る</button>
+      <span class="text-white font-bold text-sm" id="currentAngle">北 0°</span>
+      <button onclick="save()" class="bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-sm font-bold">確定</button>
+    </header>
+
+    <!-- 図面エリア（最大化） -->
+    <div class="flex-1 relative overflow-hidden bg-slate-800">
+      <div class="absolute inset-0 flex items-center justify-center p-2">
+        <div class="relative w-full h-full bg-slate-700 rounded-lg flex items-center justify-center">
+          <!-- ダミー図面 -->
+          <div class="w-full h-full bg-gradient-to-br from-slate-600 to-slate-700 rounded-lg flex items-center justify-center text-slate-500">
+            図面プレビュー
+          </div>
+          
+          <!-- コンパスアイコン（ドラッグ可能） -->
+          <div id="compass" class="compass absolute cursor-move" style="top: 15%; left: 50%; transform: translate(-50%, -50%);">
+            <img src="houi.png" id="compassImg" width="80" height="80" style="transform: rotate(0deg);" alt="方位">
+          </div>
+        </div>
+      </div>
+      
+      <!-- モード表示 -->
+      <div class="absolute top-3 left-3 bg-black/60 text-white text-xs px-3 py-1.5 rounded-full" id="modeLabel">
+        🔄 回転モード
+      </div>
+    </div>
+
+    <!-- ボトムシート -->
+    <div class="bottom-sheet bg-white rounded-t-3xl shadow-2xl flex-shrink-0" id="bottomSheet">
+      <!-- ハンドル -->
+      <div class="flex justify-center py-2">
+        <div class="w-12 h-1 bg-slate-300 rounded-full"></div>
+      </div>
+      
+      <!-- タブ切り替え -->
+      <div class="flex gap-1 px-3 mb-3">
+        <button onclick="setTab('rotate')" id="tabRotate" class="flex-1 py-2 rounded-lg text-xs font-bold tab-active">
+          🔄 回転
+        </button>
+        <button onclick="setTab('move')" id="tabMove" class="flex-1 py-2 rounded-lg text-xs font-bold bg-slate-100">
+          ↔️ 移動
+        </button>
+        <button onclick="setTab('size')" id="tabSize" class="flex-1 py-2 rounded-lg text-xs font-bold bg-slate-100">
+          📐 サイズ
+        </button>
+      </div>
+
+      <!-- 回転タブ -->
+      <div id="panelRotate" class="px-4 pb-4">
+        <!-- プリセット -->
+        <div class="grid grid-cols-4 gap-2 mb-3">
+          <button onclick="setAngle(0)" class="preset-btn py-2.5 rounded-xl text-sm font-bold bg-red-500 text-white">北</button>
+          <button onclick="setAngle(90)" class="preset-btn py-2.5 rounded-xl text-sm font-bold bg-slate-200">東</button>
+          <button onclick="setAngle(180)" class="preset-btn py-2.5 rounded-xl text-sm font-bold bg-slate-200">南</button>
+          <button onclick="setAngle(270)" class="preset-btn py-2.5 rounded-xl text-sm font-bold bg-slate-200">西</button>
+        </div>
+        
+        <!-- スライダー -->
+        <div class="flex items-center gap-3">
+          <span class="text-xs text-slate-500 w-8">0°</span>
+          <input type="range" min="0" max="355" step="5" value="0" 
+                 class="flex-1 h-2 bg-slate-200 rounded-lg appearance-none accent-emerald-600"
+                 id="angleSlider" oninput="setAngle(this.value)">
+          <span class="text-xs text-slate-500 w-10">355°</span>
+        </div>
+      </div>
+
+      <!-- 移動タブ -->
+      <div id="panelMove" class="px-4 pb-4 hidden">
+        <p class="text-center text-slate-500 text-sm mb-3">図面上のコンパスをドラッグして移動</p>
+        <div class="grid grid-cols-3 gap-2">
+          <button onclick="moveCompass('left')" class="py-3 bg-slate-100 rounded-xl">←</button>
+          <div class="flex flex-col gap-1">
+            <button onclick="moveCompass('up')" class="py-2 bg-slate-100 rounded-xl">↑</button>
+            <button onclick="moveCompass('down')" class="py-2 bg-slate-100 rounded-xl">↓</button>
+          </div>
+          <button onclick="moveCompass('right')" class="py-3 bg-slate-100 rounded-xl">→</button>
+        </div>
+      </div>
+
+      <!-- サイズタブ -->
+      <div id="panelSize" class="px-4 pb-4 hidden">
+        <div class="flex items-center justify-center gap-4">
+          <button onclick="changeScale(-0.1)" class="w-14 h-14 bg-emerald-600 text-white rounded-xl text-2xl font-bold">−</button>
+          <div class="text-center">
+            <div class="text-2xl font-bold text-slate-800" id="scaleValue">100%</div>
+            <div class="text-xs text-slate-500">サイズ</div>
+          </div>
+          <button onclick="changeScale(0.1)" class="w-14 h-14 bg-emerald-600 text-white rounded-xl text-2xl font-bold">+</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let angle = 0;
+    let scale = 1.0;
+    let currentTab = 'rotate';
+    
+    function setAngle(newAngle) {
+      angle = parseInt(newAngle);
+      document.getElementById('compassImg').style.transform = `rotate(${angle}deg)`;
+      document.getElementById('angleSlider').value = angle;
+      
+      const labels = { 0: '北', 90: '東', 180: '南', 270: '西' };
+      const label = labels[angle] || `${angle}°`;
+      document.getElementById('currentAngle').textContent = `${label} ${angle}°`;
+      
+      // プリセットボタンのスタイル更新
+      document.querySelectorAll('.preset-btn').forEach((btn, i) => {
+        const presetAngles = [0, 90, 180, 270];
+        if (presetAngles[i] === angle) {
+          btn.className = 'preset-btn py-2.5 rounded-xl text-sm font-bold bg-red-500 text-white';
+        } else {
+          btn.className = 'preset-btn py-2.5 rounded-xl text-sm font-bold bg-slate-200';
+        }
+      });
+    }
+    
+    function setTab(tab) {
+      currentTab = tab;
+      ['rotate', 'move', 'size'].forEach(t => {
+        document.getElementById(`tab${t.charAt(0).toUpperCase() + t.slice(1)}`).className = 
+          t === tab ? 'flex-1 py-2 rounded-lg text-xs font-bold tab-active' : 'flex-1 py-2 rounded-lg text-xs font-bold bg-slate-100';
+        document.getElementById(`panel${t.charAt(0).toUpperCase() + t.slice(1)}`).classList.toggle('hidden', t !== tab);
+      });
+      
+      const modeLabels = { rotate: '🔄 回転モード', move: '↔️ 移動モード', size: '📐 サイズモード' };
+      document.getElementById('modeLabel').textContent = modeLabels[tab];
+    }
+    
+    function changeScale(delta) {
+      scale = Math.max(0.5, Math.min(2.0, scale + delta));
+      document.getElementById('scaleValue').textContent = `${Math.round(scale * 100)}%`;
+      document.getElementById('compassImg').style.transform = `rotate(${angle}deg) scale(${scale})`;
+    }
+    
+    function moveCompass(dir) {
+      const compass = document.getElementById('compass');
+      const current = compass.style;
+      let top = parseFloat(current.top) || 15;
+      let left = parseFloat(current.left) || 50;
+      
+      const step = 5;
+      if (dir === 'up') top = Math.max(5, top - step);
+      if (dir === 'down') top = Math.min(95, top + step);
+      if (dir === 'left') left = Math.max(5, left - step);
+      if (dir === 'right') left = Math.min(95, left + step);
+      
+      current.top = `${top}%`;
+      current.left = `${left}%`;
+    }
+    
+    function save() {
+      alert(`保存しました\n角度: ${angle}°\nサイズ: ${Math.round(scale * 100)}%`);
+    }
+    
+    // ドラッグ操作
+    const compass = document.getElementById('compass');
+    let isDragging = false;
+    
+    compass.addEventListener('touchstart', (e) => {
+      if (currentTab === 'move') {
+        isDragging = true;
+        e.preventDefault();
+      }
+    });
+    
+    document.addEventListener('touchmove', (e) => {
+      if (isDragging && currentTab === 'move') {
+        const touch = e.touches[0];
+        const container = compass.parentElement;
+        const rect = container.getBoundingClientRect();
+        
+        let x = ((touch.clientX - rect.left) / rect.width) * 100;
+        let y = ((touch.clientY - rect.top) / rect.height) * 100;
+        
+        x = Math.max(5, Math.min(95, x));
+        y = Math.max(5, Math.min(95, y));
+        
+        compass.style.left = `${x}%`;
+        compass.style.top = `${y}%`;
+      }
+    });
+    
+    document.addEventListener('touchend', () => {
+      isDragging = false;
+    });
+  </script>
+</body>
+</html>

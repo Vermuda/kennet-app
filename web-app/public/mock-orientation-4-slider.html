@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>方位設定 - パターン4: スライダー集約型</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    * { touch-action: manipulation; }
+    
+    .compass-needle {
+      transition: transform 0.15s ease-out;
+    }
+    
+    input[type="range"] {
+      -webkit-appearance: none;
+      height: 8px;
+      background: #e2e8f0;
+      border-radius: 4px;
+    }
+    
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 28px;
+      height: 28px;
+      background: #059669;
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    }
+    
+    .control-row {
+      background: linear-gradient(to right, #f8fafc, #f1f5f9);
+    }
+  </style>
+</head>
+<body class="bg-slate-100 h-screen flex flex-col">
+  <!-- ヘッダー -->
+  <header class="bg-white shadow-sm px-4 py-3 flex items-center justify-between flex-shrink-0">
+    <button onclick="history.back()" class="text-slate-600 text-sm">← 戻る</button>
+    <h1 class="font-bold text-slate-800">方位設定</h1>
+    <button onclick="save()" class="bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-sm font-bold">確定</button>
+  </header>
+
+  <!-- 図面プレビュー -->
+  <div class="flex-1 relative bg-slate-200 overflow-hidden">
+    <div class="absolute inset-2 bg-slate-300 rounded-xl flex items-center justify-center">
+      <span class="text-slate-500">図面プレビュー</span>
+      
+      <!-- コンパスアイコン -->
+      <div id="compass" class="absolute" style="top: 15%; left: 50%; transform: translate(-50%, -50%);">
+        <img src="houi.png" id="compassImg" width="70" height="70" class="compass-needle" style="transform: rotate(0deg);" alt="方位">
+      </div>
+    </div>
+  </div>
+
+  <!-- コントロールパネル -->
+  <div class="bg-white rounded-t-3xl shadow-2xl flex-shrink-0 pb-6">
+    <!-- 角度表示 -->
+    <div class="text-center py-4 border-b border-slate-100">
+      <span class="text-3xl font-bold text-emerald-600" id="angleDisplay">北 0°</span>
+    </div>
+
+    <!-- プリセット -->
+    <div class="px-4 py-3 border-b border-slate-100">
+      <div class="grid grid-cols-4 gap-2">
+        <button onclick="setAngle(0)" class="preset py-2 rounded-lg text-xs font-bold bg-red-500 text-white">北 0°</button>
+        <button onclick="setAngle(90)" class="preset py-2 rounded-lg text-xs font-bold bg-slate-100 text-slate-700">東 90°</button>
+        <button onclick="setAngle(180)" class="preset py-2 rounded-lg text-xs font-bold bg-slate-100 text-slate-700">南 180°</button>
+        <button onclick="setAngle(270)" class="preset py-2 rounded-lg text-xs font-bold bg-slate-100 text-slate-700">西 270°</button>
+      </div>
+    </div>
+
+    <!-- スライダーコントロール -->
+    <div class="px-4 py-3 space-y-4">
+      <!-- 角度スライダー -->
+      <div class="control-row rounded-xl p-3">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-sm font-medium text-slate-700">🔄 角度</span>
+          <span class="text-sm font-bold text-emerald-600" id="angleValue">0°</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="adjustAngle(-5)" class="w-8 h-8 bg-slate-200 rounded-lg text-slate-600 font-bold">-</button>
+          <input type="range" min="0" max="355" step="5" value="0" 
+                 class="flex-1" id="angleSlider" oninput="setAngle(this.value)">
+          <button onclick="adjustAngle(5)" class="w-8 h-8 bg-slate-200 rounded-lg text-slate-600 font-bold">+</button>
+        </div>
+      </div>
+
+      <!-- 横位置スライダー -->
+      <div class="control-row rounded-xl p-3">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-sm font-medium text-slate-700">↔️ 横位置</span>
+          <span class="text-sm font-bold text-blue-600" id="xValue">50%</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-slate-400">左</span>
+          <input type="range" min="10" max="90" value="50" 
+                 class="flex-1" id="xSlider" oninput="setPosition('x', this.value)">
+          <span class="text-xs text-slate-400">右</span>
+        </div>
+      </div>
+
+      <!-- 縦位置スライダー -->
+      <div class="control-row rounded-xl p-3">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-sm font-medium text-slate-700">↕️ 縦位置</span>
+          <span class="text-sm font-bold text-blue-600" id="yValue">15%</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-slate-400">上</span>
+          <input type="range" min="10" max="90" value="15" 
+                 class="flex-1" id="ySlider" oninput="setPosition('y', this.value)">
+          <span class="text-xs text-slate-400">下</span>
+        </div>
+      </div>
+
+      <!-- サイズスライダー -->
+      <div class="control-row rounded-xl p-3">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-sm font-medium text-slate-700">📐 サイズ</span>
+          <span class="text-sm font-bold text-purple-600" id="scaleValue">100%</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-slate-400">小</span>
+          <input type="range" min="50" max="200" value="100" 
+                 class="flex-1" id="scaleSlider" oninput="setScale(this.value)">
+          <span class="text-xs text-slate-400">大</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let angle = 0;
+    let posX = 50;
+    let posY = 15;
+    let scale = 100;
+
+    function setAngle(newAngle) {
+      angle = parseInt(newAngle) % 360;
+      if (angle < 0) angle += 360;
+      
+      document.getElementById('compassImg').style.transform = `rotate(${angle}deg) scale(${scale / 100})`;
+      document.getElementById('angleSlider').value = angle;
+      document.getElementById('angleValue').textContent = `${angle}°`;
+      
+      const directions = { 0: '北', 90: '東', 180: '南', 270: '西' };
+      const dir = directions[angle] || '';
+      document.getElementById('angleDisplay').textContent = dir ? `${dir} ${angle}°` : `${angle}°`;
+      
+      // プリセット更新
+      document.querySelectorAll('.preset').forEach((btn, i) => {
+        const angles = [0, 90, 180, 270];
+        btn.className = angles[i] === angle 
+          ? 'preset py-2 rounded-lg text-xs font-bold bg-red-500 text-white'
+          : 'preset py-2 rounded-lg text-xs font-bold bg-slate-100 text-slate-700';
+      });
+    }
+
+    function adjustAngle(delta) {
+      let newAngle = angle + delta;
+      if (newAngle < 0) newAngle += 360;
+      if (newAngle >= 360) newAngle -= 360;
+      setAngle(newAngle);
+    }
+
+    function setPosition(axis, value) {
+      const compass = document.getElementById('compass');
+      
+      if (axis === 'x') {
+        posX = parseInt(value);
+        compass.style.left = `${posX}%`;
+        document.getElementById('xValue').textContent = `${posX}%`;
+      } else {
+        posY = parseInt(value);
+        compass.style.top = `${posY}%`;
+        document.getElementById('yValue').textContent = `${posY}%`;
+      }
+    }
+
+    function setScale(value) {
+      scale = parseInt(value);
+      document.getElementById('compassImg').style.transform = `rotate(${angle}deg) scale(${scale / 100})`;
+      document.getElementById('scaleValue').textContent = `${scale}%`;
+    }
+
+    function save() {
+      alert(`保存しました\n角度: ${angle}°\n位置: (${posX}%, ${posY}%)\nサイズ: ${scale}%`);
+    }
+
+    // 初期位置設定
+    setPosition('x', 50);
+    setPosition('y', 15);
+  </script>
+</body>
+</html>

@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>パターン2: コンパクトリスト - UIモック</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    * { -webkit-tap-highlight-color: transparent; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    
+    .eval-btn { 
+      min-width: 36px; min-height: 36px; 
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 6px; font-weight: bold; font-size: 12px; transition: all 0.15s;
+    }
+    .eval-btn.selected { transform: scale(1.1); box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+    .eval-a { background: #dcfce7; color: #16a34a; border: 2px solid #16a34a; }
+    .eval-a.selected { background: #16a34a; color: white; }
+    .eval-b1 { background: #dbeafe; color: #2563eb; border: 2px solid #2563eb; }
+    .eval-b1.selected { background: #2563eb; color: white; }
+    .eval-b2 { background: #fef3c7; color: #d97706; border: 2px solid #d97706; }
+    .eval-b2.selected { background: #d97706; color: white; }
+    .eval-c { background: #fee2e2; color: #dc2626; border: 2px solid #dc2626; }
+    .eval-c.selected { background: #dc2626; color: white; }
+  </style>
+</head>
+<body class="bg-white min-h-screen pb-24">
+  <!-- ヘッダー -->
+  <header class="sticky top-0 bg-white border-b px-4 py-3 z-10">
+    <div class="flex justify-between items-center">
+      <a href="mock-list.html" class="text-slate-400 text-sm">← 一覧に戻る</a>
+      <span class="text-emerald-600 text-sm font-bold">3/25完了</span>
+    </div>
+    <div class="mt-1">
+      <span class="font-bold text-slate-800">パターン2: コンパクトリスト</span>
+    </div>
+  </header>
+
+  <!-- カテゴリヘッダー -->
+  <div class="bg-blue-50 px-4 py-2 border-b border-blue-200">
+    <span class="text-blue-800 font-bold text-sm">外部① 敷地及び地盤</span>
+  </div>
+
+  <div class="divide-y">
+    <!-- 項目1（完了） -->
+    <div class="p-4 bg-emerald-50">
+      <div class="flex items-center justify-between">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="text-emerald-600 font-bold text-lg">✓</span>
+            <span class="font-bold text-slate-800">1. 地盤</span>
+          </div>
+          <p class="text-xs text-slate-500 mt-1 truncate">地盤沈下等による不陸、傾斜等の有無</p>
+        </div>
+        <div class="flex items-center gap-2 ml-2">
+          <span class="eval-btn eval-a selected">a</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 項目2（要補修） -->
+    <div class="p-4 bg-amber-50">
+      <div class="flex items-center justify-between">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="text-amber-600 font-bold text-lg">⚠</span>
+            <span class="font-bold text-slate-800">2. 敷地</span>
+            <span class="bg-amber-500 text-white text-xs px-2 py-0.5 rounded">📷1</span>
+          </div>
+          <p class="text-xs text-slate-500 mt-1 truncate">敷地内の排水桝の破損等の有無</p>
+        </div>
+        <div class="flex items-center gap-2 ml-2">
+          <span class="eval-btn eval-b2 selected">b2</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 項目3（完了） -->
+    <div class="p-4 bg-blue-50">
+      <div class="flex items-center justify-between">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="text-blue-600 font-bold text-lg">✓</span>
+            <span class="font-bold text-slate-800">3. 擁壁</span>
+          </div>
+          <p class="text-xs text-slate-500 mt-1 truncate">擁壁の劣化及び損傷の有無</p>
+        </div>
+        <div class="flex items-center gap-2 ml-2">
+          <span class="eval-btn eval-b1 selected">b1</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 項目4（未入力） -->
+    <div class="p-4">
+      <div class="flex items-start justify-between">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="text-slate-300 font-bold text-lg">○</span>
+            <span class="font-bold text-slate-800">4. 水抜きパイプ</span>
+          </div>
+          <p class="text-xs text-slate-500 mt-1 truncate">擁壁の水抜きパイプの維持保全の有無</p>
+        </div>
+        <div class="flex gap-1 ml-2">
+          <button class="eval-btn eval-a">a</button>
+          <button class="eval-btn eval-b1">b1</button>
+          <button class="eval-btn eval-b2">b2</button>
+          <button class="eval-btn eval-c">c</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 項目5 -->
+    <div class="p-4">
+      <div class="flex items-start justify-between">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="text-slate-300 font-bold text-lg">○</span>
+            <span class="font-bold text-slate-800">5. 駐車場</span>
+          </div>
+          <p class="text-xs text-slate-500 mt-1 truncate">駐車場内のひび割れ、陥没の恐れの有無</p>
+        </div>
+        <div class="flex gap-1 ml-2">
+          <button class="eval-btn eval-a">a</button>
+          <button class="eval-btn eval-b1">b1</button>
+          <button class="eval-btn eval-b2">b2</button>
+          <button class="eval-btn eval-c">c</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 項目6 -->
+    <div class="p-4">
+      <div class="flex items-start justify-between">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="text-slate-300 font-bold text-lg">○</span>
+            <span class="font-bold text-slate-800">6. 駐輪場</span>
+          </div>
+          <p class="text-xs text-slate-500 mt-1 truncate">駐輪場内のひび割れ、陥没の恐れの有無</p>
+        </div>
+        <div class="flex gap-1 ml-2">
+          <button class="eval-btn eval-a">a</button>
+          <button class="eval-btn eval-b1">b1</button>
+          <button class="eval-btn eval-b2">b2</button>
+          <button class="eval-btn eval-c">c</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 項目7 -->
+    <div class="p-4">
+      <div class="flex items-start justify-between">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="text-slate-300 font-bold text-lg">○</span>
+            <span class="font-bold text-slate-800">7. 建物の周囲</span>
+          </div>
+          <p class="text-xs text-slate-500 mt-1 truncate">隣接建物の倒壊、接触の恐れの有無</p>
+        </div>
+        <div class="flex gap-1 ml-2">
+          <button class="eval-btn eval-a">a</button>
+          <button class="eval-btn eval-b1">b1</button>
+          <button class="eval-btn eval-b2">b2</button>
+          <button class="eval-btn eval-c">c</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- カテゴリヘッダー2 -->
+  <div class="bg-blue-50 px-4 py-2 border-y border-blue-200">
+    <span class="text-blue-800 font-bold text-sm">外部② 建物外部</span>
+  </div>
+
+  <div class="divide-y">
+    <div class="p-4">
+      <div class="flex items-start justify-between">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="text-slate-300 font-bold text-lg">○</span>
+            <span class="font-bold text-slate-800">8. 基礎</span>
+          </div>
+          <p class="text-xs text-slate-500 mt-1 truncate">コンクリートの著しいひび割れ・欠損の有無</p>
+        </div>
+        <div class="flex gap-1 ml-2">
+          <button class="eval-btn eval-a">a</button>
+          <button class="eval-btn eval-b1">b1</button>
+          <button class="eval-btn eval-b2">b2</button>
+          <button class="eval-btn eval-c">c</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="p-4">
+      <div class="flex items-start justify-between">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="text-slate-300 font-bold text-lg">○</span>
+            <span class="font-bold text-slate-800">9. 外壁</span>
+          </div>
+          <p class="text-xs text-slate-500 mt-1 truncate">タイル・モルタル等の著しい浮き・剥落の有無</p>
+        </div>
+        <div class="flex gap-1 ml-2">
+          <button class="eval-btn eval-a">a</button>
+          <button class="eval-btn eval-b1">b1</button>
+          <button class="eval-btn eval-b2">b2</button>
+          <button class="eval-btn eval-c">c</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- フッター固定 -->
+  <div class="fixed bottom-0 left-0 right-0 p-4 bg-white border-t shadow-lg">
+    <button class="w-full bg-emerald-600 text-white py-4 rounded-xl font-bold">
+      保存して図面に戻る
+    </button>
+  </div>
+
+  <script>
+    document.querySelectorAll('.eval-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        const parent = this.closest('.flex');
+        if (parent) parent.querySelectorAll('.eval-btn').forEach(b => b.classList.remove('selected'));
+        this.classList.add('selected');
+      });
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>パターン2: ドロワーナビ - 現地調査チェックシート</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    * { -webkit-tap-highlight-color: transparent; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    .drawer { transform: translateX(-100%); transition: transform 0.3s ease; }
+    .drawer.open { transform: translateX(0); }
+    .drawer-overlay { opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+    .drawer-overlay.open { opacity: 1; pointer-events: auto; }
+    .eval-btn { 
+      min-width: 48px; min-height: 48px; 
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 10px; font-weight: bold; transition: all 0.15s;
+    }
+    .eval-btn:active { transform: scale(0.95); }
+    .eval-btn.selected { box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+    .eval-a { background: #dcfce7; color: #16a34a; border: 2px solid #16a34a; }
+    .eval-a.selected { background: #16a34a; color: white; }
+    .eval-b1 { background: #dbeafe; color: #2563eb; border: 2px solid #2563eb; }
+    .eval-b1.selected { background: #2563eb; color: white; }
+    .eval-b2 { background: #fef3c7; color: #d97706; border: 2px solid #d97706; }
+    .eval-b2.selected { background: #d97706; color: white; }
+    .eval-c { background: #fee2e2; color: #dc2626; border: 2px solid #dc2626; }
+    .eval-c.selected { background: #dc2626; color: white; }
+    .eval-na { background: #f1f5f9; color: #64748b; border: 2px solid #94a3b8; }
+    .eval-na.selected { background: #64748b; color: white; }
+    .category-nav-item { transition: all 0.2s; }
+    .category-nav-item.active { background: linear-gradient(90deg, #ecfdf5, transparent); border-left: 4px solid #10b981; }
+    .toast { animation: slideUp 0.3s ease; }
+    @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .category-header { scroll-margin-top: 60px; }
+  </style>
+</head>
+<body class="bg-slate-100 min-h-screen pb-24">
+  <!-- サイドドロワー -->
+  <div id="drawerOverlay" class="drawer-overlay fixed inset-0 bg-black/50 z-40" onclick="closeDrawer()"></div>
+  <div id="drawer" class="drawer fixed left-0 top-0 h-full w-72 bg-white z-50 shadow-2xl flex flex-col">
+    <div class="p-4 bg-gradient-to-r from-emerald-600 to-teal-600 text-white">
+      <div class="text-lg font-bold">検査項目ナビ</div>
+      <div id="drawerProgress" class="text-sm opacity-90 mt-1">0/101 完了 (0%)</div>
+    </div>
+    <div id="drawerNav" class="flex-1 overflow-y-auto py-2"></div>
+    <div class="p-3 border-t bg-slate-50">
+      <button onclick="resetData()" class="text-xs text-red-500 w-full text-left">🗑 データをリセット</button>
+    </div>
+  </div>
+
+  <!-- ヘッダー -->
+  <header class="sticky top-0 bg-white z-20 shadow-sm">
+    <div class="px-3 py-2 flex items-center gap-3">
+      <button onclick="openDrawer()" class="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center text-xl">☰</button>
+      <div class="flex-1">
+        <div class="text-sm font-bold text-slate-800">現地調査チェックシート</div>
+        <div id="headerProgress" class="text-xs text-emerald-600">0/101</div>
+      </div>
+      <a href="mock-list.html" class="text-slate-400 text-xs">← 戻る</a>
+    </div>
+  </header>
+
+  <!-- コンテンツ -->
+  <div id="content" class="p-3 space-y-4"></div>
+
+  <!-- 評価追加モーダル -->
+  <div id="evalModal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-end">
+    <div class="bg-white rounded-t-3xl w-full p-5 pb-8">
+      <div class="w-12 h-1.5 bg-slate-300 rounded-full mx-auto mb-4"></div>
+      <div class="flex items-center gap-2 mb-2">
+        <span id="modalNum" class="bg-blue-600 text-white text-xs px-2 py-0.5 rounded font-bold"></span>
+        <h3 id="modalTitle" class="font-bold text-slate-800"></h3>
+      </div>
+      <p id="modalDesc" class="text-sm text-slate-500 mb-4"></p>
+      
+      <div class="mb-4">
+        <label class="text-xs text-slate-400 mb-1 block">場所メモ（任意）</label>
+        <input type="text" id="locationMemo" placeholder="例：北側、2階など" 
+               class="w-full border-2 border-slate-200 rounded-xl px-4 py-3 text-base focus:border-emerald-500 focus:outline-none">
+      </div>
+      
+      <div class="grid grid-cols-5 gap-2 mb-4">
+        <button onclick="selectEval('a')" class="eval-btn eval-a flex-col py-4" data-eval="a">
+          <span class="text-xl">a</span>
+          <span class="text-[9px] mt-0.5">良好</span>
+        </button>
+        <button onclick="selectEval('b1')" class="eval-btn eval-b1 flex-col py-4" data-eval="b1">
+          <span class="text-xl">b1</span>
+          <span class="text-[9px] mt-0.5">軽度</span>
+        </button>
+        <button onclick="selectEval('b2')" class="eval-btn eval-b2 flex-col py-4" data-eval="b2">
+          <span class="text-xl">b2</span>
+          <span class="text-[9px] mt-0.5">中度</span>
+        </button>
+        <button onclick="selectEval('c')" class="eval-btn eval-c flex-col py-4" data-eval="c">
+          <span class="text-xl">c</span>
+          <span class="text-[9px] mt-0.5">重度</span>
+        </button>
+        <button onclick="selectEval('na')" class="eval-btn eval-na flex-col py-4" data-eval="na">
+          <span class="text-xl">−</span>
+          <span class="text-[9px] mt-0.5">対象外</span>
+        </button>
+      </div>
+      
+      <div class="flex gap-3">
+        <button onclick="closeModal()" class="flex-1 border-2 border-slate-300 text-slate-600 py-3 rounded-xl font-bold">
+          キャンセル
+        </button>
+        <button id="addBtn" onclick="addEvaluation()" disabled class="flex-1 bg-slate-300 text-white py-3 rounded-xl font-bold">
+          追加
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- トースト -->
+  <div id="toast" class="hidden fixed bottom-20 left-4 right-4 bg-slate-800 text-white px-4 py-3 rounded-xl text-sm text-center toast z-50"></div>
+
+  <!-- フッター -->
+  <div class="fixed bottom-0 left-0 right-0 p-3 bg-white border-t shadow-lg z-30">
+    <button onclick="saveAndReturn()" class="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold">
+      💾 保存して図面に戻る
+    </button>
+  </div>
+
+  <script>
+    // 検査データ（101項目）
+    const inspectionData = {
+      categories: [
+        {
+          id: 'cat1', name: '外部① 敷地及び地盤', shortName: '敷地・地盤',
+          items: [
+            { id: 'item1', num: 1, name: '地盤', desc: '地盤沈下等による不陸、傾斜等の有無' },
+            { id: 'item2', num: 2, name: '敷地', desc: '敷地内の排水桝の破損等の有無（側溝、マンホール及び桝の状況）' },
+            { id: 'item3', num: 3, name: '擁壁', desc: '擁壁の劣化及び損傷の有無' },
+            { id: 'item4', num: 4, name: '水抜きパイプ', desc: '擁壁の水抜きパイプの維持保全の有無' },
+            { id: 'item5', num: 5, name: '駐車場', desc: '駐車場内のひび割れ、陥没の恐れの有無' },
+            { id: 'item6', num: 6, name: '駐輪場', desc: '駐輪場内のひび割れ、陥没の恐れの有無' },
+            { id: 'item7', num: 7, name: '建物の周囲', desc: '隣接建物の倒壊、接触の恐れの有無' },
+          ]
+        },
+        {
+          id: 'cat2', name: '外部② 各点検口内', shortName: '点検口内',
+          items: [
+            { id: 'item8', num: 8, name: '床下点検口', desc: '基礎立ち上り及び底盤の著しいひび割れ、劣化又は欠損等の有無' },
+            { id: 'item9', num: 9, name: 'スコープ調査', desc: '広範囲にまたぐひび割れの有無' },
+            { id: 'item10', num: 10, name: 'コンクリート劣化', desc: 'コンクリートの著しい劣化の有無（ジャンカ、豆板等）' },
+            { id: 'item11', num: 11, name: 'さび汁・白華', desc: 'さび汁（白華を含む）を伴うひび割れ、欠損の有無' },
+            { id: 'item12', num: 12, name: '鉄筋露出', desc: '鉄筋の露出の有無' },
+            { id: 'item13', num: 13, name: '設備配管貫通部', desc: '設備配管の基礎貫通部の隙間の有無' },
+            { id: 'item14', num: 14, name: '基礎底盤水染み', desc: '基礎底盤に水たまり又は水染み跡の有無' },
+            { id: 'item15', num: 15, name: '土台・床組', desc: '土台及び床組に著しいひび割れ、劣化又は欠損の有無' },
+            { id: 'item16', num: 16, name: '木部腐朽', desc: '木部の腐朽、カビの付着の有無' },
+            { id: 'item17', num: 17, name: '基礎天端隙間', desc: '基礎天端と土台の間に著しい隙間の有無' },
+            { id: 'item18', num: 18, name: '床組染み跡', desc: '床組に染み跡の有無' },
+            { id: 'item19', num: 19, name: '水漏れ・変形', desc: '水漏れ、変形、等の有無' },
+            { id: 'item20', num: 20, name: '蟻害', desc: '蟻害（木造・鉄骨のみ）の有無' },
+            { id: 'item21', num: 21, name: '配管配線接続部', desc: '配管及び配線接続部の劣化、脱落の有無' },
+            { id: 'item22', num: 22, name: '天井下地材', desc: '天井の下地材のひび割れ、欠損、浮き、はらみの有無' },
+            { id: 'item23', num: 23, name: '小屋組劣化', desc: '小屋組に著しいひび割れ、劣化又は欠損の有無' },
+            { id: 'item24', num: 24, name: '横架材欠込み', desc: '横架材の引っ張り側に欠込みの有無' },
+            { id: 'item25', num: 25, name: '雨漏り跡・腐朽', desc: '小屋組に雨漏りの跡、腐朽の有無' },
+            { id: 'item26', num: 26, name: '配管配線接続', desc: '配管及び配線の接続状況' },
+            { id: 'item27', num: 27, name: 'ダクト接続', desc: 'ダクトの接続状況' },
+            { id: 'item28', num: 28, name: '耐火被覆', desc: '耐火被覆にひび割れ、欠損、剥離などの有無' },
+            { id: 'item29', num: 29, name: '鉄骨部サビ', desc: '鉄骨部のサビの有無' },
+          ]
+        },
+        {
+          id: 'cat3', name: '外部③ 基礎', shortName: '基礎',
+          items: [
+            { id: 'item30', num: 30, name: 'コンクリート直仕上げ', desc: '幅0.5mm以上のひび割れ、広範囲に及ぶひび割れの有無' },
+            { id: 'item31', num: 31, name: '欠損', desc: '深さ20mm以上の欠損又は広範囲に及ぶ欠損の有無' },
+            { id: 'item32', num: 32, name: 'モルタル仕上げひび割れ', desc: '仕上部分を貫通して基礎コンクリートに達するひび割れの有無' },
+            { id: 'item33', num: 33, name: 'モルタル欠損', desc: '躯体まで連続する20mm以上の欠損の有無' },
+            { id: 'item34', num: 34, name: '仕上げ剥離', desc: '仕上部分の広範囲な剥離、躯体露出の有無' },
+            { id: 'item35', num: 35, name: 'その他仕上げ', desc: 'その他劣化事象等に準じるものの有無' },
+            { id: 'item36', num: 36, name: '鉄筋露出', desc: '鉄筋の露出の有無' },
+            { id: 'item37', num: 37, name: '基礎沈下', desc: '基礎の沈下等の有無' },
+            { id: 'item38', num: 38, name: '基礎天端高さ', desc: '基礎天端と地盤面との平均的高さ' },
+            { id: 'item39', num: 39, name: '設備配管隙間', desc: '設備配管の基礎貫通部の隙間の有無' },
+          ]
+        },
+        {
+          id: 'cat4', name: '外部③ 外壁', shortName: '外壁',
+          items: [
+            { id: 'item40', num: 40, name: '外壁ひび割れ', desc: '幅0.5mm以上のひび割れ、広範囲に及ぶひび割れの有無' },
+            { id: 'item41', num: 41, name: '外壁欠損', desc: '深さ20mm以上の欠損、広範囲に及ぶ欠損の有無' },
+            { id: 'item42', num: 42, name: 'コンクリート劣化', desc: 'コンクリートの著しい劣化の有無' },
+            { id: 'item43', num: 43, name: 'さび汁・白華', desc: 'さび汁を伴うひび割れ、欠損の有無' },
+            { id: 'item44', num: 44, name: '鉄筋露出', desc: '鉄筋の露出の有無' },
+            { id: 'item45', num: 45, name: '下地材劣化', desc: '下地材まで到達するひび割れ、欠損等の有無' },
+            { id: 'item46', num: 46, name: 'タイル劣化', desc: '複数のタイル等にまたがった劣化の有無' },
+            { id: 'item47', num: 47, name: '鉄筋露出(RC)', desc: '鉄筋の露出の有無(RC造)' },
+            { id: 'item48', num: 48, name: '仕上材せり上がり', desc: '仕上材のせり上がり、膨らみ、浮き等の有無' },
+            { id: 'item49', num: 49, name: '板状仕上材割れ', desc: '板状仕上材の全幅に渡る割れの有無' },
+            { id: 'item50', num: 50, name: '板状仕上材かけ', desc: '板状仕上材のかけ損じ、下地材露出の有無' },
+            { id: 'item51', num: 51, name: '金属板状仕上材錆', desc: '金属板状仕上材の著しい錆の有無' },
+            { id: 'item52', num: 52, name: '鉄筋露出(鉄骨)', desc: '鉄筋の露出の有無(鉄骨造)' },
+            { id: 'item53', num: 53, name: 'シーリング', desc: 'シーリング材の破断、欠損、硬化の有無' },
+            { id: 'item54', num: 54, name: '建具周囲隙間', desc: '建具の周囲に隙間の有無' },
+            { id: 'item55', num: 55, name: '軒裏水染み', desc: '軒裏の水染み・破損の有無' },
+            { id: 'item56', num: 56, name: '雨樋破損', desc: '雨樋の破損やカビ等の有無' },
+            { id: 'item57', num: 57, name: '設備配管外壁貫通部', desc: '設備配管の外壁貫通部の隙間の有無' },
+          ]
+        },
+        {
+          id: 'cat5', name: '外部③ 廊下・階段等', shortName: '廊下・階段',
+          items: [
+            { id: 'item58', num: 58, name: '支持部材', desc: '支持部材のぐらつき、ひび割れ、劣化の有無' },
+            { id: 'item59', num: 59, name: '仕上状況', desc: '仕上状況・ひび割れ・欠損・水染み等の有無' },
+            { id: 'item60', num: 60, name: '天井シーリング', desc: 'シーリングの破断の有無' },
+            { id: 'item61', num: 61, name: '照明器具', desc: '照明器具のカバー等の劣化の有無' },
+            { id: 'item62', num: 62, name: 'ぐらつき・錆', desc: 'ぐらつき・錆の有無' },
+            { id: 'item63', num: 63, name: '手摺壁ひび割れ', desc: 'ひび割れ・欠損等の有無' },
+            { id: 'item64', num: 64, name: '手摺壁シーリング', desc: 'シーリングの破断、硬化の有無' },
+            { id: 'item65', num: 65, name: '手摺笠木', desc: '手摺、笠木の劣化、コケ等の有無' },
+            { id: 'item66', num: 66, name: '仕上ひび割れ', desc: '仕上状況・ひび割れ・欠損等の有無' },
+            { id: 'item67', num: 67, name: '防水層', desc: '防水層の著しい劣化の有無' },
+            { id: 'item68', num: 68, name: '排水勾配', desc: '屋外廊下の排水勾配' },
+            { id: 'item69', num: 69, name: '排水溝よごれ', desc: '排水溝のよごれの有無' },
+            { id: 'item70', num: 70, name: '排水溝堆積物', desc: '排水溝、目皿の堆積物、劣化等の有無' },
+            { id: 'item71', num: 71, name: '床シーリング', desc: 'シーリングの破断、硬化の有無' },
+            { id: 'item72', num: 72, name: '屋外階段支柱床', desc: '支柱、床、手摺の劣化の有無' },
+            { id: 'item73', num: 73, name: '階段裏側', desc: '階段裏側の被覆・塗装の剥離、錆の有無' },
+            { id: 'item74', num: 74, name: '接合部金物', desc: '接合部金物の腐食の有無' },
+          ]
+        },
+        {
+          id: 'cat6', name: '外部④ 屋根及び屋上', shortName: '屋根・屋上',
+          items: [
+            { id: 'item75', num: 75, name: '屋根劣化', desc: '屋根の劣化及び損傷の有無' },
+            { id: 'item76', num: 76, name: '屋根ふき材', desc: '屋根ふき材の割れ、腐食等の劣化の有無' },
+            { id: 'item77', num: 77, name: '緊結金物', desc: '緊結金物、雪止め金物の劣化の有無' },
+            { id: 'item78', num: 78, name: '軒樋', desc: '軒樋の破損の有無' },
+            { id: 'item79', num: 79, name: 'アンテナ等', desc: 'アンテナ等の機器の傾き、破損の有無' },
+            { id: 'item80', num: 80, name: '軒裏水染み', desc: '軒裏の水染み、破損の有無' },
+            { id: 'item81', num: 81, name: '屋上面劣化', desc: '屋上面の劣化及び損傷の有無' },
+            { id: 'item82', num: 82, name: 'ひび割れ反り', desc: '歩行上危険なひび割れ、反りの有無' },
+            { id: 'item83', num: 83, name: '伸縮目地材', desc: '伸縮目地材の欠損、植物繁茂の有無' },
+            { id: 'item84', num: 84, name: '防水層劣化', desc: '防水層、保護層の劣化の有無' },
+            { id: 'item85', num: 85, name: 'パラペット', desc: 'パラペットの劣化及び損傷の有無' },
+            { id: 'item86', num: 86, name: '金属笠木', desc: '金属笠木の劣化及び損傷の有無' },
+            { id: 'item87', num: 87, name: '手摺ぐらつき', desc: '手摺のぐらつき、錆の発生の有無' },
+            { id: 'item88', num: 88, name: '笠木結合部', desc: '笠木結合部の緩み、変形の有無' },
+            { id: 'item89', num: 89, name: '排水溝ドレーン', desc: '排水溝の詰まり、ひび割れ、浮きの有無' },
+            { id: 'item90', num: 90, name: '水たまり', desc: '水たまりの有無' },
+            { id: 'item91', num: 91, name: '架台支持部', desc: '架台・支持部分のひび割れ、破損の有無' },
+          ]
+        },
+        {
+          id: 'cat7', name: '外部⑤ 共用部（管理状況）', shortName: '管理状況',
+          items: [
+            { id: 'item92', num: 92, name: '内装・郵便受け', desc: '郵便受けの美観、清掃状況' },
+            { id: 'item93', num: 93, name: '共用廊下・ごみ置場', desc: '清掃・管理の状態' },
+            { id: 'item94', num: 94, name: '駐輪場・駐車場', desc: '清掃・管理の状態' },
+          ]
+        },
+        {
+          id: 'cat8', name: '鉄筋・シュミットハンマー', shortName: '鉄筋・強度',
+          items: [
+            { id: 'item95', num: 95, name: '鉄筋確認', desc: '鉄筋の有無と配筋のピッチの確認' },
+            { id: 'item96', num: 96, name: 'シュミットハンマー', desc: '強度低下について確認' },
+          ]
+        },
+        {
+          id: 'cat9', name: 'その他 違法性関係', shortName: '違法性',
+          items: [
+            { id: 'item97', num: 97, name: '構造荷重計算不適合', desc: '増築等による構造荷重計算不適合の懸念の有無' },
+            { id: 'item98', num: 98, name: '地震倒壊懸念', desc: '増築、増床部分に地震による倒壊等の懸念の有無' },
+            { id: 'item99', num: 99, name: '用途不整合', desc: '検査済証、謄本と使用用途との不整合の有無' },
+            { id: 'item100', num: 100, name: '形状不整合', desc: '検査済証、図面、謄本との不整合の有無' },
+            { id: 'item101', num: 101, name: '実測値不整合', desc: '建物形状の実測値との不整合' },
+          ]
+        }
+      ]
+    };
+
+    let evaluations = {};
+    let currentItemId = null;
+    let selectedEval = null;
+
+    function init() {
+      loadFromStorage();
+      renderDrawerNav();
+      renderContent();
+      updateProgress();
+    }
+
+    function loadFromStorage() {
+      const saved = localStorage.getItem('kennet_inspection_v2');
+      if (saved) evaluations = JSON.parse(saved);
+    }
+
+    function saveToStorage() {
+      localStorage.setItem('kennet_inspection_v2', JSON.stringify(evaluations));
+    }
+
+    function getCategoryProgress(cat) {
+      let done = 0;
+      cat.items.forEach(item => { if (evaluations[item.id]?.length > 0) done++; });
+      return { done, total: cat.items.length };
+    }
+
+    function getTotalProgress() {
+      let done = 0, total = 0;
+      inspectionData.categories.forEach(cat => {
+        const p = getCategoryProgress(cat);
+        done += p.done; total += p.total;
+      });
+      return { done, total, percent: Math.round((done / total) * 100) };
+    }
+
+    function updateProgress() {
+      const p = getTotalProgress();
+      document.getElementById('headerProgress').textContent = `${p.done}/${p.total}`;
+      document.getElementById('drawerProgress').textContent = `${p.done}/${p.total} 完了 (${p.percent}%)`;
+      renderDrawerNav();
+    }
+
+    function renderDrawerNav() {
+      const nav = document.getElementById('drawerNav');
+      nav.innerHTML = inspectionData.categories.map(cat => {
+        const p = getCategoryProgress(cat);
+        const isComplete = p.done === p.total;
+        const hasProgress = p.done > 0;
+        return `
+          <button onclick="jumpTo('${cat.id}')" class="category-nav-item w-full text-left px-4 py-3 flex justify-between items-center ${isComplete ? 'bg-emerald-50' : ''}">
+            <div>
+              <div class="text-sm font-bold ${isComplete ? 'text-emerald-700' : 'text-slate-700'}">${isComplete ? '✓ ' : ''}${cat.shortName}</div>
+              <div class="text-xs text-slate-400">${cat.name}</div>
+            </div>
+            <span class="text-xs ${isComplete ? 'bg-emerald-500 text-white' : (hasProgress ? 'text-emerald-600 bg-emerald-100' : 'text-slate-400 bg-slate-100')} px-2 py-1 rounded-full font-bold">${p.done}/${p.total}</span>
+          </button>
+        `;
+      }).join('');
+    }
+
+    function renderContent() {
+      const content = document.getElementById('content');
+      content.innerHTML = inspectionData.categories.map(cat => {
+        const p = getCategoryProgress(cat);
+        return `
+          <div id="${cat.id}" class="category-header">
+            <div class="bg-gradient-to-r from-slate-700 to-slate-800 text-white px-4 py-3 rounded-t-xl font-bold flex justify-between items-center">
+              <span class="text-sm">${cat.name}</span>
+              <span class="text-xs bg-white/20 px-2 py-1 rounded">${p.done}/${p.total}</span>
+            </div>
+            <div class="bg-white rounded-b-xl shadow-sm divide-y divide-slate-100">
+              ${cat.items.map(item => renderItem(item)).join('')}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderItem(item) {
+      const evals = evaluations[item.id] || [];
+      const hasEvals = evals.length > 0;
+      
+      return `
+        <div class="p-3 ${!hasEvals ? 'bg-slate-50/50' : ''}">
+          <div class="flex justify-between items-start gap-2">
+            <div class="flex-1" onclick="openModal('${item.id}')">
+              <div class="flex items-center gap-2">
+                <span class="w-7 h-7 rounded-lg ${hasEvals ? 'bg-emerald-500' : 'bg-slate-300'} text-white text-xs flex items-center justify-center font-bold">${item.num}</span>
+                <h4 class="font-bold text-slate-800 text-sm">${item.name}</h4>
+                ${hasEvals ? `<span class="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">${evals.length}件</span>` : ''}
+              </div>
+              <p class="text-xs text-slate-500 mt-1 ml-9 line-clamp-2">${item.desc}</p>
+            </div>
+            <button onclick="openModal('${item.id}')" class="w-12 h-12 ${hasEvals ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'} rounded-xl flex items-center justify-center text-2xl flex-shrink-0">
+              +
+            </button>
+          </div>
+          ${hasEvals ? `
+            <div class="flex flex-wrap gap-1.5 mt-2 ml-9">
+              ${evals.map((e, idx) => renderEvalBadge(item.id, e, idx)).join('')}
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }
+
+    function renderEvalBadge(itemId, evalData, idx) {
+      const colors = { 'a': 'bg-emerald-500', 'b1': 'bg-blue-500', 'b2': 'bg-amber-500', 'c': 'bg-red-500', 'na': 'bg-slate-400' };
+      return `
+        <span class="${colors[evalData.eval]} text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
+          ${evalData.eval === 'na' ? '−' : evalData.eval}${evalData.memo ? `: ${evalData.memo.substring(0, 8)}` : ''}
+          <button onclick="event.stopPropagation(); removeEvaluation('${itemId}', ${idx})" class="ml-0.5 opacity-70 hover:opacity-100">×</button>
+        </span>
+      `;
+    }
+
+    function openDrawer() {
+      document.getElementById('drawer').classList.add('open');
+      document.getElementById('drawerOverlay').classList.add('open');
+    }
+
+    function closeDrawer() {
+      document.getElementById('drawer').classList.remove('open');
+      document.getElementById('drawerOverlay').classList.remove('open');
+    }
+
+    function jumpTo(catId) {
+      closeDrawer();
+      setTimeout(() => {
+        document.getElementById(catId).scrollIntoView({ behavior: 'smooth' });
+      }, 300);
+    }
+
+    function openModal(itemId) {
+      currentItemId = itemId;
+      selectedEval = null;
+      
+      let itemInfo = null;
+      inspectionData.categories.forEach(cat => {
+        cat.items.forEach(item => { if (item.id === itemId) itemInfo = item; });
+      });
+      
+      document.getElementById('modalNum').textContent = itemInfo.num;
+      document.getElementById('modalTitle').textContent = itemInfo.name;
+      document.getElementById('modalDesc').textContent = itemInfo.desc;
+      document.getElementById('locationMemo').value = '';
+      
+      document.querySelectorAll('#evalModal .eval-btn').forEach(btn => btn.classList.remove('selected'));
+      document.getElementById('addBtn').disabled = true;
+      document.getElementById('addBtn').className = 'flex-1 bg-slate-300 text-white py-3 rounded-xl font-bold';
+      
+      document.getElementById('evalModal').classList.remove('hidden');
+    }
+
+    function closeModal() {
+      document.getElementById('evalModal').classList.add('hidden');
+    }
+
+    function selectEval(evalType) {
+      selectedEval = evalType;
+      document.querySelectorAll('#evalModal .eval-btn').forEach(btn => {
+        btn.classList.remove('selected');
+        if (btn.dataset.eval === evalType) btn.classList.add('selected');
+      });
+      document.getElementById('addBtn').disabled = false;
+      document.getElementById('addBtn').className = 'flex-1 bg-emerald-600 text-white py-3 rounded-xl font-bold';
+    }
+
+    function addEvaluation() {
+      if (!currentItemId || !selectedEval) return;
+      const memo = document.getElementById('locationMemo').value.trim();
+      if (!evaluations[currentItemId]) evaluations[currentItemId] = [];
+      evaluations[currentItemId].push({ eval: selectedEval, memo, timestamp: Date.now() });
+      saveToStorage();
+      renderContent();
+      updateProgress();
+      closeModal();
+      showToast('評価を追加しました');
+    }
+
+    function removeEvaluation(itemId, idx) {
+      evaluations[itemId].splice(idx, 1);
+      if (evaluations[itemId].length === 0) delete evaluations[itemId];
+      saveToStorage();
+      renderContent();
+      updateProgress();
+      showToast('削除しました');
+    }
+
+    function resetData() {
+      if (confirm('すべてのデータをリセットしますか？')) {
+        evaluations = {};
+        saveToStorage();
+        renderContent();
+        updateProgress();
+        closeDrawer();
+        showToast('リセットしました');
+      }
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.remove('hidden');
+      setTimeout(() => t.classList.add('hidden'), 2000);
+    }
+
+    function saveAndReturn() {
+      saveToStorage();
+      showToast('保存しました');
+    }
+
+    init();
+  </script>
+</body>
+</html>

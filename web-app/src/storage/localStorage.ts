@@ -29,12 +29,12 @@ const FIXED_USERS_HASHED: UserWithHash[] = [
   {
     id: '1',
     username: 'user1',
-    passwordHash: 'f8c3bf62a9aa3e6fc1619c250e48ede3f80221c72208c96f4a7c88f4e3f14c7a'
+    passwordHash: '7d219bfd21773bfd9b451265ba92ca32d9dc5c105e182a784aab3a20745aa1de'
   },
   {
     id: '2',
     username: 'user2',
-    passwordHash: '86c4b0e9f2e8c1e5e9a2f3f8c0c8e5c9e5e1f2e4c9c1f3e7c8f5e2e1f4c9c2f3'
+    passwordHash: '1a16b848bd5f8ff580455e19fadebd08efbcdfd79db72202ab76c1c4d40bedc7'
   },
 ];
 
@@ -45,12 +45,37 @@ const convertToUser = (userWithHash: UserWithHash): User => ({
   password: '', // セキュリティのため空文字
 });
 
-// データの読み込み
+// データの読み込み（マイグレーション処理を含む）
 export const loadData = (): AppState => {
   try {
     const data = localStorage.getItem(STORAGE_KEY);
     if (data) {
-      return JSON.parse(data);
+      const parsedData: AppState = JSON.parse(data);
+
+      // データマイグレーション: 既存データに新しいフィールドを追加
+      if (parsedData.properties) {
+        parsedData.properties = parsedData.properties.map(p => ({
+          ...p,
+          // 新フィールドが未定義の場合は初期化
+          inspectionDate: p.inspectionDate || undefined,
+          weather: p.weather || undefined,
+          standardPhotos: p.standardPhotos || [],
+        }));
+      }
+
+      if (parsedData.blueprints) {
+        parsedData.blueprints = parsedData.blueprints.map(b => ({
+          ...b,
+          // 方位が未定義の場合はそのまま
+          orientation: b.orientation !== undefined ? b.orientation : undefined,
+          // 方位アイコンの位置とスケールのデフォルト値
+          orientationIconX: b.orientationIconX ?? 50,  // デフォルト: 中央
+          orientationIconY: b.orientationIconY ?? 10,  // デフォルト: 上部
+          orientationIconScale: b.orientationIconScale ?? 1.0,  // デフォルト: 等倍
+        }));
+      }
+
+      return parsedData;
     }
   } catch (error) {
     console.error('Failed to load data from localStorage:', error);

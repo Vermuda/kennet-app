@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>方位設定 - パターン2: 円形ダイヤル型</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    * { touch-action: manipulation; }
+    
+    .dial {
+      background: conic-gradient(
+        from 0deg,
+        #ef4444 0deg 10deg,
+        #f87171 10deg 80deg,
+        #fbbf24 80deg 100deg,
+        #34d399 100deg 170deg,
+        #22d3ee 170deg 190deg,
+        #60a5fa 190deg 260deg,
+        #a78bfa 260deg 280deg,
+        #f472b6 280deg 350deg,
+        #ef4444 350deg 360deg
+      );
+    }
+    
+    .dial-inner {
+      background: radial-gradient(circle, #1e293b 0%, #0f172a 100%);
+    }
+    
+    .compass-needle {
+      transition: transform 0.15s ease-out;
+    }
+  </style>
+</head>
+<body class="bg-slate-900 h-screen overflow-hidden">
+  <div class="h-full flex flex-col">
+    <!-- 図面エリア（全画面） -->
+    <div class="flex-1 relative">
+      <!-- 図面背景 -->
+      <div class="absolute inset-0 bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center">
+        <span class="text-slate-500">図面プレビュー</span>
+      </div>
+      
+      <!-- コンパスアイコン -->
+      <div id="compass" class="absolute cursor-move" style="top: 15%; left: 50%; transform: translate(-50%, -50%);">
+        <img src="houi.png" id="compassImg" width="70" height="70" class="compass-needle" style="transform: rotate(0deg);" alt="方位">
+      </div>
+
+      <!-- 上部オーバーレイ -->
+      <div class="absolute top-0 left-0 right-0 p-3 flex justify-between items-center">
+        <button onclick="history.back()" class="bg-black/50 text-white px-3 py-1.5 rounded-lg text-sm backdrop-blur">
+          ← 戻る
+        </button>
+        <div class="bg-black/50 text-white px-4 py-1.5 rounded-lg backdrop-blur">
+          <span class="text-xl font-bold" id="angleDisplay">0°</span>
+          <span class="text-sm ml-1" id="directionLabel">北</span>
+        </div>
+        <button onclick="save()" class="bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-sm font-bold">
+          確定
+        </button>
+      </div>
+
+      <!-- モード切り替えボタン -->
+      <div class="absolute top-16 right-3 flex flex-col gap-2">
+        <button onclick="setMode('rotate')" id="btnRotate" class="w-12 h-12 bg-emerald-600 text-white rounded-xl flex items-center justify-center text-xl shadow-lg">
+          🔄
+        </button>
+        <button onclick="setMode('move')" id="btnMove" class="w-12 h-12 bg-slate-600 text-white rounded-xl flex items-center justify-center text-xl shadow-lg">
+          ↔️
+        </button>
+        <button onclick="setMode('size')" id="btnSize" class="w-12 h-12 bg-slate-600 text-white rounded-xl flex items-center justify-center text-xl shadow-lg">
+          📐
+        </button>
+      </div>
+
+      <!-- サイズ調整（サイズモード時表示） -->
+      <div id="sizeControls" class="absolute left-3 top-1/2 -translate-y-1/2 flex flex-col gap-3 hidden">
+        <button onclick="changeScale(0.1)" class="w-12 h-12 bg-emerald-600 text-white rounded-xl text-2xl font-bold shadow-lg">+</button>
+        <div class="bg-black/50 text-white text-center py-2 px-1 rounded-lg backdrop-blur text-sm" id="scaleDisplay">100%</div>
+        <button onclick="changeScale(-0.1)" class="w-12 h-12 bg-emerald-600 text-white rounded-xl text-2xl font-bold shadow-lg">−</button>
+      </div>
+    </div>
+
+    <!-- 下部ダイヤルコントローラー -->
+    <div class="bg-slate-800 pt-4 pb-6 px-4 flex-shrink-0">
+      <!-- プリセットボタン -->
+      <div class="flex justify-center gap-3 mb-4">
+        <button onclick="setAngle(0)" class="preset px-4 py-1.5 rounded-full text-sm font-bold bg-red-500 text-white">北</button>
+        <button onclick="setAngle(90)" class="preset px-4 py-1.5 rounded-full text-sm font-bold bg-slate-600 text-white">東</button>
+        <button onclick="setAngle(180)" class="preset px-4 py-1.5 rounded-full text-sm font-bold bg-slate-600 text-white">南</button>
+        <button onclick="setAngle(270)" class="preset px-4 py-1.5 rounded-full text-sm font-bold bg-slate-600 text-white">西</button>
+      </div>
+
+      <!-- 円形ダイヤル -->
+      <div class="flex justify-center">
+        <div class="relative w-40 h-40">
+          <!-- 外側のダイヤル -->
+          <div class="dial absolute inset-0 rounded-full opacity-30"></div>
+          
+          <!-- 目盛り -->
+          <svg class="absolute inset-0 w-full h-full" viewBox="0 0 160 160">
+            <g transform="translate(80, 80)">
+              <!-- 主要方角 -->
+              <text x="0" y="-58" text-anchor="middle" fill="white" font-size="12" font-weight="bold">N</text>
+              <text x="58" y="4" text-anchor="middle" fill="white" font-size="12" font-weight="bold">E</text>
+              <text x="0" y="64" text-anchor="middle" fill="white" font-size="12" font-weight="bold">S</text>
+              <text x="-58" y="4" text-anchor="middle" fill="white" font-size="12" font-weight="bold">W</text>
+              
+              <!-- 30度刻みのマーク -->
+              <g stroke="white" stroke-width="2">
+                <line x1="0" y1="-45" x2="0" y2="-52" transform="rotate(0)"/>
+                <line x1="0" y1="-45" x2="0" y2="-50" transform="rotate(30)"/>
+                <line x1="0" y1="-45" x2="0" y2="-50" transform="rotate(60)"/>
+                <line x1="0" y1="-45" x2="0" y2="-52" transform="rotate(90)"/>
+                <line x1="0" y1="-45" x2="0" y2="-50" transform="rotate(120)"/>
+                <line x1="0" y1="-45" x2="0" y2="-50" transform="rotate(150)"/>
+                <line x1="0" y1="-45" x2="0" y2="-52" transform="rotate(180)"/>
+                <line x1="0" y1="-45" x2="0" y2="-50" transform="rotate(210)"/>
+                <line x1="0" y1="-45" x2="0" y2="-50" transform="rotate(240)"/>
+                <line x1="0" y1="-45" x2="0" y2="-52" transform="rotate(270)"/>
+                <line x1="0" y1="-45" x2="0" y2="-50" transform="rotate(300)"/>
+                <line x1="0" y1="-45" x2="0" y2="-50" transform="rotate(330)"/>
+              </g>
+            </g>
+          </svg>
+          
+          <!-- 内側のノブ -->
+          <div class="dial-inner absolute inset-4 rounded-full flex items-center justify-center" id="dialKnob">
+            <!-- 指針 -->
+            <div class="absolute w-1 h-10 bg-red-500 rounded-full" style="top: 8px;" id="dialIndicator"></div>
+            
+            <!-- 中央表示 -->
+            <div class="text-center">
+              <div class="text-white text-2xl font-bold" id="dialAngle">0°</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let angle = 0;
+    let scale = 1.0;
+    let mode = 'rotate';
+    let isDragging = false;
+
+    const dialKnob = document.getElementById('dialKnob');
+    const dialIndicator = document.getElementById('dialIndicator');
+
+    function setAngle(newAngle) {
+      angle = parseInt(newAngle) % 360;
+      if (angle < 0) angle += 360;
+      
+      document.getElementById('compassImg').style.transform = `rotate(${angle}deg) scale(${scale})`;
+      document.getElementById('dialIndicator').style.transform = `rotate(${angle}deg)`;
+      document.getElementById('angleDisplay').textContent = `${angle}°`;
+      document.getElementById('dialAngle').textContent = `${angle}°`;
+      
+      const directions = { 0: '北', 45: '北東', 90: '東', 135: '南東', 180: '南', 225: '南西', 270: '西', 315: '北西' };
+      let dir = '';
+      for (let d in directions) {
+        if (Math.abs(angle - parseInt(d)) <= 22 || Math.abs(angle - parseInt(d) - 360) <= 22) {
+          dir = directions[d];
+          break;
+        }
+      }
+      document.getElementById('directionLabel').textContent = dir || '';
+      
+      // プリセットボタン更新
+      document.querySelectorAll('.preset').forEach((btn, i) => {
+        const angles = [0, 90, 180, 270];
+        btn.className = angles[i] === angle 
+          ? 'preset px-4 py-1.5 rounded-full text-sm font-bold bg-red-500 text-white'
+          : 'preset px-4 py-1.5 rounded-full text-sm font-bold bg-slate-600 text-white';
+      });
+    }
+
+    function setMode(m) {
+      mode = m;
+      ['rotate', 'move', 'size'].forEach(t => {
+        const btn = document.getElementById(`btn${t.charAt(0).toUpperCase() + t.slice(1)}`);
+        btn.className = t === m 
+          ? 'w-12 h-12 bg-emerald-600 text-white rounded-xl flex items-center justify-center text-xl shadow-lg'
+          : 'w-12 h-12 bg-slate-600 text-white rounded-xl flex items-center justify-center text-xl shadow-lg';
+      });
+      
+      document.getElementById('sizeControls').classList.toggle('hidden', m !== 'size');
+    }
+
+    function changeScale(delta) {
+      scale = Math.max(0.5, Math.min(2.0, scale + delta));
+      document.getElementById('scaleDisplay').textContent = `${Math.round(scale * 100)}%`;
+      document.getElementById('compassImg').style.transform = `rotate(${angle}deg) scale(${scale})`;
+    }
+
+    function save() {
+      alert(`保存しました\n角度: ${angle}°\nサイズ: ${Math.round(scale * 100)}%`);
+    }
+
+    // ダイヤル操作
+    dialKnob.addEventListener('touchstart', (e) => {
+      isDragging = true;
+      e.preventDefault();
+    });
+
+    document.addEventListener('touchmove', (e) => {
+      if (!isDragging) return;
+      
+      const touch = e.touches[0];
+      const rect = dialKnob.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      
+      const dx = touch.clientX - centerX;
+      const dy = touch.clientY - centerY;
+      
+      let newAngle = Math.atan2(dx, -dy) * (180 / Math.PI);
+      if (newAngle < 0) newAngle += 360;
+      newAngle = Math.round(newAngle / 5) * 5;
+      
+      setAngle(newAngle);
+    });
+
+    document.addEventListener('touchend', () => {
+      isDragging = false;
+    });
+
+    // コンパスのドラッグ（移動モード）
+    const compass = document.getElementById('compass');
+    let compassDragging = false;
+
+    compass.addEventListener('touchstart', (e) => {
+      if (mode === 'move') {
+        compassDragging = true;
+        e.preventDefault();
+      }
+    });
+
+    document.addEventListener('touchmove', (e) => {
+      if (!compassDragging || mode !== 'move') return;
+      
+      const touch = e.touches[0];
+      const container = compass.parentElement;
+      const rect = container.getBoundingClientRect();
+      
+      let x = ((touch.clientX - rect.left) / rect.width) * 100;
+      let y = ((touch.clientY - rect.top) / rect.height) * 100;
+      
+      x = Math.max(10, Math.min(90, x));
+      y = Math.max(10, Math.min(90, y));
+      
+      compass.style.left = `${x}%`;
+      compass.style.top = `${y}%`;
+    });
+
+    document.addEventListener('touchend', () => {
+      compassDragging = false;
+    });
+  </script>
+</body>
+</html>

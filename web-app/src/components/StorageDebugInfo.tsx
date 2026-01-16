@@ -50,16 +50,16 @@ const StorageDebugInfo: React.FC<StorageDebugInfoProps> = ({ show = true }) => {
   };
 
   return (
-    <div className="fixed bottom-4 right-4 z-50">
+    <div className="fixed bottom-4 left-4 z-40">
       {!isExpanded ? (
         <button
           onClick={() => setIsExpanded(true)}
-          className={`${getWarningColor()} text-white px-4 py-2 rounded-lg shadow-lg hover:opacity-90 transition text-sm font-semibold`}
+          className={`${getWarningColor()} text-white px-3 py-1.5 rounded-lg shadow-lg hover:opacity-90 transition text-xs font-semibold`}
         >
           💾 {usage.usagePercentage.toFixed(0)}%
         </button>
       ) : (
-        <div className="bg-white rounded-lg shadow-2xl p-4 w-80 border-2 border-gray-200">
+        <div className="bg-white rounded-xl shadow-2xl p-4 w-80 border-2 border-gray-200">
           <div className="flex justify-between items-center mb-3">
             <h3 className="font-bold text-gray-800 flex items-center gap-2">
               💾 LocalStorage 使用状況
@@ -120,7 +120,7 @@ const StorageDebugInfo: React.FC<StorageDebugInfoProps> = ({ show = true }) => {
 
             {/* 警告メッセージ */}
             {warningLevel !== 'safe' && (
-              <div className={`p-3 rounded-lg text-sm ${
+              <div className={`p-3 rounded-xl text-sm ${
                 warningLevel === 'critical' 
                   ? 'bg-red-50 text-red-800 border border-red-200' 
                   : 'bg-yellow-50 text-yellow-800 border border-yellow-200'

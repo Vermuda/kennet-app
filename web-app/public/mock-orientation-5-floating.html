@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>方位設定 - パターン5: フローティング＋直接操作型</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    * { touch-action: manipulation; }
+    
+    .compass-needle {
+      transition: transform 0.1s ease-out;
+    }
+    
+    .floating-btn {
+      backdrop-filter: blur(8px);
+      transition: all 0.2s ease-out;
+    }
+    
+    .floating-btn:active {
+      transform: scale(0.95);
+    }
+    
+    .compass-ring {
+      position: absolute;
+      border: 3px dashed rgba(16, 185, 129, 0.5);
+      border-radius: 50%;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    
+    .compass-ring.active {
+      opacity: 1;
+      animation: ringPulse 1.5s infinite;
+    }
+    
+    @keyframes ringPulse {
+      0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.5; }
+      50% { transform: translate(-50%, -50%) scale(1.1); opacity: 0.8; }
+    }
+    
+    .direction-marker {
+      position: absolute;
+      font-size: 10px;
+      font-weight: bold;
+      color: white;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+    }
+  </style>
+</head>
+<body class="bg-slate-900 h-screen overflow-hidden">
+  <div class="h-full relative" id="container">
+    <!-- 図面エリア -->
+    <div class="absolute inset-0 bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center">
+      <span class="text-slate-500">図面プレビュー</span>
+      
+      <!-- ガイドリング（回転時表示） -->
+      <div id="compassRing" class="compass-ring" style="width: 150px; height: 150px; top: 15%; left: 50%;"></div>
+      
+      <!-- コンパスアイコン -->
+      <div id="compass" class="absolute cursor-pointer" style="top: 15%; left: 50%; transform: translate(-50%, -50%);">
+        <img src="houi.png" id="compassImg" width="80" height="80" class="compass-needle" style="transform: rotate(0deg);" alt="方位">
+      </div>
+    </div>
+
+    <!-- 左上: 戻る -->
+    <button onclick="history.back()" class="floating-btn absolute top-3 left-3 bg-black/50 text-white px-3 py-2 rounded-xl text-sm">
+      ← 戻る
+    </button>
+
+    <!-- 中央上: 角度表示 -->
+    <div class="absolute top-3 left-1/2 -translate-x-1/2 bg-black/50 text-white px-5 py-2 rounded-xl backdrop-blur-sm">
+      <div class="text-xl font-bold text-center" id="angleDisplay">北 0°</div>
+    </div>
+
+    <!-- 右上: 確定 -->
+    <button onclick="save()" class="floating-btn absolute top-3 right-3 bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg">
+      確定
+    </button>
+
+    <!-- 右側: サイズコントロール -->
+    <div class="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col gap-2">
+      <button onclick="changeScale(0.1)" class="floating-btn w-12 h-12 bg-black/50 text-white rounded-xl text-xl font-bold">
+        +
+      </button>
+      <div class="bg-black/50 text-white text-center py-2 rounded-xl text-xs backdrop-blur-sm" id="scaleDisplay">
+        100%
+      </div>
+      <button onclick="changeScale(-0.1)" class="floating-btn w-12 h-12 bg-black/50 text-white rounded-xl text-xl font-bold">
+        −
+      </button>
+    </div>
+
+    <!-- 左側: 移動/回転モード切替 -->
+    <div class="absolute left-3 top-1/2 -translate-y-1/2 flex flex-col gap-2">
+      <button onclick="setMode('rotate')" id="btnRotate" class="floating-btn w-12 h-12 bg-emerald-600 text-white rounded-xl text-lg shadow-lg">
+        🔄
+      </button>
+      <button onclick="setMode('move')" id="btnMove" class="floating-btn w-12 h-12 bg-black/50 text-white rounded-xl text-lg">
+        ✋
+      </button>
+    </div>
+
+    <!-- 下部: プリセット -->
+    <div class="absolute bottom-4 left-4 right-4">
+      <div class="bg-black/50 backdrop-blur-sm rounded-2xl p-2">
+        <div class="flex gap-1">
+          <button onclick="setAngle(0)" class="preset flex-1 py-2.5 rounded-xl text-sm font-bold bg-red-500 text-white">
+            北
+          </button>
+          <button onclick="setAngle(45)" class="preset flex-1 py-2.5 rounded-xl text-sm font-bold bg-white/10 text-white/80">
+            NE
+          </button>
+          <button onclick="setAngle(90)" class="preset flex-1 py-2.5 rounded-xl text-sm font-bold bg-white/10 text-white/80">
+            東
+          </button>
+          <button onclick="setAngle(135)" class="preset flex-1 py-2.5 rounded-xl text-sm font-bold bg-white/10 text-white/80">
+            SE
+          </button>
+          <button onclick="setAngle(180)" class="preset flex-1 py-2.5 rounded-xl text-sm font-bold bg-white/10 text-white/80">
+            南
+          </button>
+          <button onclick="setAngle(225)" class="preset flex-1 py-2.5 rounded-xl text-sm font-bold bg-white/10 text-white/80">
+            SW
+          </button>
+          <button onclick="setAngle(270)" class="preset flex-1 py-2.5 rounded-xl text-sm font-bold bg-white/10 text-white/80">
+            西
+          </button>
+          <button onclick="setAngle(315)" class="preset flex-1 py-2.5 rounded-xl text-sm font-bold bg-white/10 text-white/80">
+            NW
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ヒント（下部） -->
+    <div class="absolute bottom-20 left-1/2 -translate-x-1/2 text-white/50 text-xs" id="hint">
+      コンパスの周りをドラッグして回転
+    </div>
+  </div>
+
+  <script>
+    let angle = 0;
+    let scale = 1.0;
+    let posX = 50;
+    let posY = 15;
+    let mode = 'rotate';
+    let isDragging = false;
+
+    function setAngle(newAngle) {
+      angle = parseInt(newAngle) % 360;
+      if (angle < 0) angle += 360;
+      
+      document.getElementById('compassImg').style.transform = `rotate(${angle}deg) scale(${scale})`;
+      
+      const directions = { 
+        0: '北', 45: '北東', 90: '東', 135: '南東', 
+        180: '南', 225: '南西', 270: '西', 315: '北西' 
+      };
+      const dir = directions[angle] || '';
+      document.getElementById('angleDisplay').textContent = dir ? `${dir} ${angle}°` : `${angle}°`;
+      
+      // プリセット更新
+      const presetAngles = [0, 45, 90, 135, 180, 225, 270, 315];
+      document.querySelectorAll('.preset').forEach((btn, i) => {
+        btn.className = presetAngles[i] === angle 
+          ? 'preset flex-1 py-2.5 rounded-xl text-sm font-bold bg-red-500 text-white'
+          : 'preset flex-1 py-2.5 rounded-xl text-sm font-bold bg-white/10 text-white/80';
+      });
+    }
+
+    function setMode(m) {
+      mode = m;
+      document.getElementById('btnRotate').className = m === 'rotate' 
+        ? 'floating-btn w-12 h-12 bg-emerald-600 text-white rounded-xl text-lg shadow-lg'
+        : 'floating-btn w-12 h-12 bg-black/50 text-white rounded-xl text-lg';
+      document.getElementById('btnMove').className = m === 'move' 
+        ? 'floating-btn w-12 h-12 bg-emerald-600 text-white rounded-xl text-lg shadow-lg'
+        : 'floating-btn w-12 h-12 bg-black/50 text-white rounded-xl text-lg';
+      
+      document.getElementById('hint').textContent = m === 'rotate' 
+        ? 'コンパスの周りをドラッグして回転' 
+        : 'コンパスをドラッグして移動';
+    }
+
+    function changeScale(delta) {
+      scale = Math.max(0.5, Math.min(2.0, scale + delta));
+      document.getElementById('compassImg').style.transform = `rotate(${angle}deg) scale(${scale})`;
+      document.getElementById('scaleDisplay').textContent = `${Math.round(scale * 100)}%`;
+    }
+
+    function updateCompassPosition() {
+      const compass = document.getElementById('compass');
+      const ring = document.getElementById('compassRing');
+      compass.style.left = `${posX}%`;
+      compass.style.top = `${posY}%`;
+      ring.style.left = `${posX}%`;
+      ring.style.top = `${posY}%`;
+    }
+
+    function save() {
+      alert(`保存しました\n角度: ${angle}°\n位置: (${Math.round(posX)}%, ${Math.round(posY)}%)\nサイズ: ${Math.round(scale * 100)}%`);
+    }
+
+    // タッチ操作
+    const container = document.getElementById('container');
+    const compass = document.getElementById('compass');
+    const ring = document.getElementById('compassRing');
+    const markers = document.getElementById('directionMarkers');
+
+    compass.addEventListener('touchstart', (e) => {
+      isDragging = true;
+      if (mode === 'rotate') {
+        ring.classList.add('active');
+        markers.classList.remove('hidden');
+      }
+      e.preventDefault();
+    });
+
+    document.addEventListener('touchmove', (e) => {
+      if (!isDragging) return;
+      
+      const touch = e.touches[0];
+      
+      if (mode === 'rotate') {
+        // 回転
+        const rect = compass.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        
+        const dx = touch.clientX - centerX;
+        const dy = touch.clientY - centerY;
+        
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance > 20) {
+          let newAngle = Math.atan2(dx, -dy) * (180 / Math.PI);
+          if (newAngle < 0) newAngle += 360;
+          newAngle = Math.round(newAngle / 5) * 5;
+          setAngle(newAngle);
+        }
+      } else {
+        // 移動
+        const containerRect = container.getBoundingClientRect();
+        posX = ((touch.clientX - containerRect.left) / containerRect.width) * 100;
+        posY = ((touch.clientY - containerRect.top) / containerRect.height) * 100;
+        
+        posX = Math.max(10, Math.min(90, posX));
+        posY = Math.max(10, Math.min(85, posY));
+        
+        updateCompassPosition();
+      }
+    });
+
+    document.addEventListener('touchend', () => {
+      isDragging = false;
+      ring.classList.remove('active');
+      markers.classList.add('hidden');
+    });
+
+    // マウス操作（PC対応）
+    compass.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      if (mode === 'rotate') {
+        ring.classList.add('active');
+        markers.classList.remove('hidden');
+      }
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      
+      if (mode === 'rotate') {
+        const rect = compass.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        
+        const dx = e.clientX - centerX;
+        const dy = e.clientY - centerY;
+        
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance > 20) {
+          let newAngle = Math.atan2(dx, -dy) * (180 / Math.PI);
+          if (newAngle < 0) newAngle += 360;
+          newAngle = Math.round(newAngle / 5) * 5;
+          setAngle(newAngle);
+        }
+      } else {
+        const containerRect = container.getBoundingClientRect();
+        posX = ((e.clientX - containerRect.left) / containerRect.width) * 100;
+        posY = ((e.clientY - containerRect.top) / containerRect.height) * 100;
+        
+        posX = Math.max(10, Math.min(90, posX));
+        posY = Math.max(10, Math.min(85, posY));
+        
+        updateCompassPosition();
+      }
+    });
+
+    document.addEventListener('mouseup', () => {
+      isDragging = false;
+      ring.classList.remove('active');
+      markers.classList.add('hidden');
+    });
+  </script>
+</body>
+</html>

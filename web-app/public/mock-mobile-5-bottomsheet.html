@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>パターン5: ボトムシート - UIモック</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    * { -webkit-tap-highlight-color: transparent; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    
+    .eval-btn { 
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      border-radius: 10px; font-weight: bold; transition: all 0.15s; padding: 12px 8px;
+      flex: 1;
+    }
+    .eval-btn.selected { transform: scale(1.05); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+    .eval-a { background: #dcfce7; color: #16a34a; border: 2px solid #16a34a; }
+    .eval-a.selected { background: #16a34a; color: white; }
+    .eval-b1 { background: #dbeafe; color: #2563eb; border: 2px solid #2563eb; }
+    .eval-b1.selected { background: #2563eb; color: white; }
+    .eval-b2 { background: #fef3c7; color: #d97706; border: 2px solid #d97706; }
+    .eval-b2.selected { background: #d97706; color: white; }
+    .eval-c { background: #fee2e2; color: #dc2626; border: 2px solid #dc2626; }
+    .eval-c.selected { background: #dc2626; color: white; }
+    .big-check { width: 22px; height: 22px; accent-color: #10b981; }
+
+    .bottom-sheet {
+      transform: translateY(100%);
+      transition: transform 0.3s ease-out;
+    }
+    .bottom-sheet.open {
+      transform: translateY(0);
+    }
+    .overlay {
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+    }
+    .overlay.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  </style>
+</head>
+<body class="bg-slate-100 min-h-screen pb-4">
+  <!-- ヘッダー -->
+  <header class="sticky top-0 bg-white px-4 py-3 z-10 border-b shadow-sm">
+    <div class="flex justify-between items-center">
+      <a href="mock-list.html" class="text-slate-400 text-sm">← 一覧に戻る</a>
+      <span class="text-emerald-600 text-sm font-bold">3/25完了</span>
+    </div>
+    <div class="mt-1">
+      <span class="font-bold text-slate-800">パターン5: ボトムシート</span>
+    </div>
+    <p class="text-xs text-slate-500 mt-1">項目をタップして詳細入力</p>
+  </header>
+
+  <!-- シンプルなリスト -->
+  <div class="p-4 space-y-2">
+    <div class="bg-emerald-500 text-white rounded-xl p-4 flex justify-between items-center cursor-pointer active:scale-[0.98] transition">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl">✓</span>
+        <div>
+          <div class="font-bold">1. 地盤</div>
+          <div class="text-xs opacity-80">a - 問題なし</div>
+        </div>
+      </div>
+      <span class="text-2xl">›</span>
+    </div>
+
+    <div class="bg-amber-500 text-white rounded-xl p-4 flex justify-between items-center cursor-pointer active:scale-[0.98] transition">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl">📷</span>
+        <div>
+          <div class="font-bold">2. 敷地</div>
+          <div class="text-xs opacity-80">b2 - 要補修（写真1枚）</div>
+        </div>
+      </div>
+      <span class="text-2xl">›</span>
+    </div>
+
+    <div class="bg-blue-500 text-white rounded-xl p-4 flex justify-between items-center cursor-pointer active:scale-[0.98] transition">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl">✓</span>
+        <div>
+          <div class="font-bold">3. 擁壁</div>
+          <div class="text-xs opacity-80">b1 - 経過観察</div>
+        </div>
+      </div>
+      <span class="text-2xl">›</span>
+    </div>
+
+    <div onclick="openSheet()" class="bg-white rounded-xl p-4 flex justify-between items-center border-2 border-dashed border-slate-300 cursor-pointer active:scale-[0.98] transition">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl text-slate-300">○</span>
+        <div>
+          <div class="font-bold text-slate-800">4. 水抜きパイプ</div>
+          <div class="text-xs text-slate-500">タップして入力</div>
+        </div>
+      </div>
+      <span class="text-2xl text-slate-400">›</span>
+    </div>
+
+    <div class="bg-white rounded-xl p-4 flex justify-between items-center border-2 border-dashed border-slate-300 cursor-pointer active:scale-[0.98] transition">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl text-slate-300">○</span>
+        <div>
+          <div class="font-bold text-slate-800">5. 駐車場</div>
+          <div class="text-xs text-slate-500">タップして入力</div>
+        </div>
+      </div>
+      <span class="text-2xl text-slate-400">›</span>
+    </div>
+
+    <div class="bg-white rounded-xl p-4 flex justify-between items-center border-2 border-dashed border-slate-300 cursor-pointer active:scale-[0.98] transition">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl text-slate-300">○</span>
+        <div>
+          <div class="font-bold text-slate-800">6. 駐輪場</div>
+          <div class="text-xs text-slate-500">タップして入力</div>
+        </div>
+      </div>
+      <span class="text-2xl text-slate-400">›</span>
+    </div>
+
+    <div class="bg-white rounded-xl p-4 flex justify-between items-center border-2 border-dashed border-slate-300 cursor-pointer active:scale-[0.98] transition">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl text-slate-300">○</span>
+        <div>
+          <div class="font-bold text-slate-800">7. 建物の周囲</div>
+          <div class="text-xs text-slate-500">タップして入力</div>
+        </div>
+      </div>
+      <span class="text-2xl text-slate-400">›</span>
+    </div>
+  </div>
+
+  <!-- オーバーレイ -->
+  <div id="overlay" onclick="closeSheet()" class="overlay fixed inset-0 bg-black/50 z-20"></div>
+
+  <!-- ボトムシート -->
+  <div id="bottomSheet" class="bottom-sheet fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-2xl z-30">
+    <div onclick="closeSheet()" class="w-12 h-1.5 bg-slate-300 rounded-full mx-auto my-3 cursor-pointer"></div>
+    <div class="px-6 pb-8">
+      <div class="flex justify-between items-start mb-2">
+        <div>
+          <span class="text-xs text-blue-600 font-bold">外部① 敷地及び地盤</span>
+          <h3 class="text-xl font-bold text-slate-800">4. 水抜きパイプ</h3>
+        </div>
+        <button onclick="closeSheet()" class="text-slate-400 text-2xl leading-none">×</button>
+      </div>
+      <p class="text-sm text-slate-500 mb-5">擁壁の水抜きパイプの維持保全の有無</p>
+
+      <!-- 大きな評価ボタン -->
+      <div class="flex gap-3 mb-5">
+        <button class="eval-btn eval-a">
+          <span class="text-lg">a</span>
+          <span class="text-[10px] mt-1">問題なし</span>
+        </button>
+        <button class="eval-btn eval-b1">
+          <span class="text-lg">b1</span>
+          <span class="text-[10px] mt-1">経過観察</span>
+        </button>
+        <button class="eval-btn eval-b2">
+          <span class="text-lg">b2</span>
+          <span class="text-[10px] mt-1">要補修</span>
+        </button>
+        <button class="eval-btn eval-c">
+          <span class="text-lg">c</span>
+          <span class="text-[10px] mt-1">著しい劣化</span>
+        </button>
+      </div>
+
+      <!-- 調査方法 -->
+      <div class="flex gap-3 justify-center mb-5">
+        <label class="flex items-center gap-2 bg-slate-100 px-4 py-2 rounded-lg text-sm">
+          <input type="checkbox" class="big-check"> 目視
+        </label>
+        <label class="flex items-center gap-2 bg-slate-100 px-4 py-2 rounded-lg text-sm">
+          <input type="checkbox" class="big-check"> 計測
+        </label>
+        <label class="flex items-center gap-2 bg-slate-100 px-4 py-2 rounded-lg text-sm">
+          <input type="checkbox" class="big-check"> 触診
+        </label>
+      </div>
+
+      <button onclick="closeSheet()" class="w-full bg-emerald-600 text-white py-4 rounded-xl font-bold">
+        確定
+      </button>
+    </div>
+  </div>
+
+  <script>
+    function openSheet() {
+      document.getElementById('bottomSheet').classList.add('open');
+      document.getElementById('overlay').classList.add('open');
+    }
+    function closeSheet() {
+      document.getElementById('bottomSheet').classList.remove('open');
+      document.getElementById('overlay').classList.remove('open');
+    }
+
+    document.querySelectorAll('.eval-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('.eval-btn').forEach(b => b.classList.remove('selected'));
+        this.classList.add('selected');
+      });
+    });
+  </script>
+</body>
+</html>

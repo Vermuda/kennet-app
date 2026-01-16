@@ -5,11 +5,24 @@ export interface User {
   password: string;
 }
 
+// 定形写真
+export interface StandardPhoto {
+  id: string;
+  propertyId: string;
+  photoType: number; // 1-16
+  imageData: string; // Base64エンコードされた画像データ
+  isRequired: boolean;
+  createdAt: string;
+}
+
 // 物件
 export interface Property {
   id: string;
   name: string;
   address: string;
+  inspectionDate?: string; // 検査日（yyyy-mm-dd）
+  weather?: string; // 天候
+  standardPhotos?: StandardPhoto[];
   createdAt: string;
   updatedAt: string;
 }
@@ -28,6 +41,10 @@ export interface Blueprint {
   id: string;
   floorId: string;
   imageData: string; // Base64エンコードされた画像データ
+  orientation?: number; // 方位角度（0-355、5度刻み）
+  orientationIconX?: number; // 方位アイコンのX座標（パーセンテージ 0-100）
+  orientationIconY?: number; // 方位アイコンのY座標（パーセンテージ 0-100）
+  orientationIconScale?: number; // 方位アイコンのスケール（0.5-3.0）
   createdAt: string;
 }
 
@@ -66,9 +83,15 @@ export interface DefectInfo {
   repairMethod: string; // 補修・改修の範囲・方法
   imageData: string; // Base64エンコードされた画像データ
   createdAt: string;
+  // 新フロー用の追加フィールド
+  inspectionItemId?: string; // 検査項目ID
+  evaluationType?: string; // 評価タイプ (b2/c)
+  positionX?: number; // 図面上のX座標（%）
+  positionY?: number; // 図面上のY座標（%）
+  blueprintId?: string; // 図面ID
 }
 
-// 参考画像
+// 通常撮影
 export interface ReferenceImage {
   id: string;
   propertyId: string;

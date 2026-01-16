@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { loadData, updateData } from '../storage/localStorage';
+import ReferencePhotoButton from '../components/ReferencePhotoButton';
 import type { DefectInfo, Inspection, Marker, Blueprint, Floor } from '../types';
 
 interface DefectWithDetails extends DefectInfo {
@@ -14,6 +15,7 @@ const DefectListPage: React.FC = () => {
   const { blueprintId } = useParams<{ blueprintId: string }>();
   const [defects, setDefects] = useState<DefectWithDetails[]>([]);
   const [selectedDefect, setSelectedDefect] = useState<DefectWithDetails | null>(null);
+  const [propertyId, setPropertyId] = useState<string | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -23,15 +25,21 @@ const DefectListPage: React.FC = () => {
   const loadDefects = () => {
     const data = loadData();
     const blueprintData = data.blueprints.find((b) => b.id === blueprintId);
-    
+
     if (!blueprintData) {
       navigate('/properties');
       return;
     }
 
+    // propertyIdを取得
+    const floor = data.floors.find((f) => f.id === blueprintData.floorId);
+    if (floor) {
+      setPropertyId(floor.propertyId);
+    }
+
     // この図面に関連する不具合を取得
     const defectsWithDetails: DefectWithDetails[] = [];
-    
+
     data.defects.forEach((defect) => {
       const inspection = data.inspections.find((i) => i.id === defect.inspectionId);
       if (!inspection || inspection.blueprintId !== blueprintId) return;
@@ -39,7 +47,6 @@ const DefectListPage: React.FC = () => {
       const marker = data.markers.find((m) => m.id === inspection.markerId);
       if (!marker) return;
 
-      const floor = data.floors.find((f) => f.id === blueprintData.floorId);
       if (!floor) return;
 
       defectsWithDetails.push({
@@ -111,15 +118,16 @@ const DefectListPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center gap-4">
+      <header className="bg-gray-800 text-white shadow flex-shrink-0">
+        <div className="px-3 py-2 flex items-center justify-between gap-2">
           <button
             onClick={() => navigate(`/blueprints/${blueprintId}`)}
-            className="text-gray-600 hover:text-gray-800"
+            className="px-2 py-1 border border-white text-white rounded text-xs font-medium hover:bg-white hover:text-slate-900 transition-all whitespace-nowrap"
           >
             ← 戻る
           </button>
-          <h1 className="text-2xl font-bold text-gray-800">不具合一覧</h1>
+          <h1 className="text-sm font-bold whitespace-nowrap">不具合一覧</h1>
+          <div className="w-12"></div>
         </div>
       </header>
 
@@ -129,7 +137,7 @@ const DefectListPage: React.FC = () => {
             {defects.map((defect) => (
               <div
                 key={defect.id}
-                className="bg-white rounded-lg shadow hover:shadow-lg transition duration-200 overflow-hidden cursor-pointer"
+                className="bg-white rounded-xl shadow-md hover:shadow-xl transition duration-200 overflow-hidden cursor-pointer"
                 onClick={() => setSelectedDefect(defect)}
               >
                 <div className="aspect-video bg-gray-200">
@@ -163,7 +171,7 @@ const DefectListPage: React.FC = () => {
             ))}
           </div>
         ) : (
-          <div className="bg-white rounded-lg shadow p-12 text-center text-gray-500">
+          <div className="bg-white rounded-xl shadow-md p-12 text-center text-gray-500">
             登録された不具合がありません
           </div>
         )}
@@ -176,7 +184,7 @@ const DefectListPage: React.FC = () => {
           onClick={() => setSelectedDefect(null)}
         >
           <div
-            className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-auto"
+            className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-6">
@@ -194,7 +202,7 @@ const DefectListPage: React.FC = () => {
               <img
                 src={selectedDefect.imageData}
                 alt="不具合画像"
-                className="w-full h-auto rounded-lg mb-6"
+                className="w-full h-auto rounded-xl mb-6"
               />
 
               <div className="space-y-4">
@@ -238,7 +246,7 @@ const DefectListPage: React.FC = () => {
               <div className="flex gap-3 mt-6">
                 <button
                   onClick={() => handleEditDefect(selectedDefect)}
-                  className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700"
+                  className="flex-1 bg-emerald-600 text-white py-2 rounded-xl hover:bg-emerald-700 transition-all duration-300 ease-out transform hover:scale-105 active:scale-95"
                 >
                   編集
                 </button>
@@ -250,13 +258,13 @@ const DefectListPage: React.FC = () => {
                       selectedDefect.marker.id
                     )
                   }
-                  className="flex-1 bg-red-600 text-white py-2 rounded-lg hover:bg-red-700"
+                  className="flex-1 bg-red-600 text-white py-2 rounded-xl hover:bg-red-700"
                 >
                   削除
                 </button>
                 <button
                   onClick={() => setSelectedDefect(null)}
-                  className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400"
+                  className="flex-1 border-2 border-slate-600 text-slate-600 py-2 rounded-xl hover:bg-slate-700 hover:text-white hover:border-slate-700 transition-all duration-300 ease-out transform hover:scale-105 active:scale-95"
                 >
                   閉じる
                 </button>
@@ -265,6 +273,9 @@ const DefectListPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* 通常撮影ボタン - モーダル表示中は非表示 */}
+      {propertyId && !selectedDefect && <ReferencePhotoButton propertyId={propertyId} />}
     </div>
   );
 };

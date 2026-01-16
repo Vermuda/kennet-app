@@ -1,10 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { compressImage, formatSize, getBase64Size } from '../utils/imageCompression';
-import { logStorageUsage, getStorageWarningLevel } from '../storage/localStorage';
+import { logStorageUsage, getStorageWarningLevel, loadData } from '../storage/localStorage';
+import { uploadToB2 } from '../services/b2Storage';
+import { generateId } from '../utils/helpers';
 
 const CameraPage: React.FC = () => {
-  const { mode } = useParams<{ mode: 'defect' | 'reference' }>();
+  const { mode } = useParams<{ mode: 'defect' | 'reference' | 'standard' }>();
   const navigate = useNavigate();
   const location = useLocation();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -12,6 +14,8 @@ const CameraPage: React.FC = () => {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [cameraStarted, setCameraStarted] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   useEffect(() => {
     console.log('[Camera] mount. mode =', mode);
@@ -195,11 +199,197 @@ const CameraPage: React.FC = () => {
     startCamera();
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
+    if (!capturedImage) return;
+
+    setIsUploading(true);
+    setUploadError(null);
+
+    try {
+      // B2へアップロード
+      const data = loadData();
+      let propertyId: string;
+      let floorId: string;
+      let imageType: 'blueprints' | 'defects' | 'references' | 'standard';
+      const imageId = generateId();
+
+      if (mode === 'defect') {
+        // 不具合撮影の場合
+        const state = location.state as {
+          inspectionId?: string;
+          blueprintId: string;
+          isEdit?: boolean;
+          returnPath?: string;
+          existingData?: any;
+          // 新フロー用のパラメータ
+          propertyId?: string;
+          inspectionItemId?: string;
+          inspectionItemName?: string;
+          evaluationId?: string;
+          evaluationType?: string;
+          positionX?: number;
+          positionY?: number;
+        };
+
+        // blueprintIdからfloorIdとpropertyIdを取得
+        const blueprint = data.blueprints.find(b => b.id === state.blueprintId);
+        if (blueprint) {
+          const floor = data.floors.find(f => f.id === blueprint.floorId);
+          floorId = blueprint.floorId;
+          propertyId = state.propertyId || floor?.propertyId || 'unknown';
+        } else {
+          floorId = 'unknown';
+          propertyId = state.propertyId || 'unknown';
+        }
+        imageType = 'defects';
+
+        // B2にアップロード
+        console.log('[Camera] Uploading defect image to B2...');
+        const uploadResult = await uploadToB2({
+          propertyId,
+          floorId,
+          imageType,
+          imageId,
+          imageData: capturedImage,
+        });
+
+        if (!uploadResult.success) {
+          console.warn('[Camera] B2 upload failed:', uploadResult.error);
+          // アップロード失敗してもローカル保存は続行
+        } else {
+          console.log('[Camera] B2 upload successful:', uploadResult.key);
+        }
+
+        if (state.isEdit && state.returnPath) {
+          // 編集時の撮影し直し
+          navigate(state.returnPath, {
+            state: {
+              newImageData: capturedImage,
+              existingData: state.existingData,
+            },
+          });
+        } else {
+          // 新規不具合撮影
+          navigate('/defect/input', {
+            state: {
+              inspectionId: state.inspectionId,
+              blueprintId: state.blueprintId,
+              imageData: capturedImage,
+              returnPath: state.returnPath,
+              // 新フロー用のパラメータ
+              propertyId: state.propertyId,
+              inspectionItemId: state.inspectionItemId,
+              inspectionItemName: state.inspectionItemName,
+              evaluationId: state.evaluationId,
+              evaluationType: state.evaluationType,
+              positionX: state.positionX,
+              positionY: state.positionY,
+            },
+          });
+        }
+      } else if (mode === 'standard') {
+        // 定形写真撮影の場合
+        const state = location.state as {
+          propertyId: string;
+          photoType: number;
+        };
+
+        propertyId = state.propertyId;
+        floorId = 'standard'; // 定形写真はフロアに紐づかない
+        imageType = 'standard';
+
+        // B2にアップロード
+        console.log('[Camera] Uploading standard photo to B2...');
+        const uploadResult = await uploadToB2({
+          propertyId,
+          floorId,
+          imageType: 'references', // B2のフォルダ構成としてはreferencesを使用
+          imageId: `standard_${state.photoType}_${imageId}`,
+          imageData: capturedImage,
+        });
+
+        if (!uploadResult.success) {
+          console.warn('[Camera] B2 upload failed:', uploadResult.error);
+        } else {
+          console.log('[Camera] B2 upload successful:', uploadResult.key);
+        }
+
+        navigate(`/properties/${state.propertyId}/standard-photos`, {
+          state: {
+            newPhoto: {
+              photoType: state.photoType,
+              imageData: capturedImage,
+            },
+          },
+        });
+      } else {
+        // 通常撮影の場合
+        const state = location.state as {
+          propertyId: string;
+          returnPath: string;
+          blueprintId?: string;
+        };
+
+        propertyId = state.propertyId;
+        
+        // returnPathからblueprintIdを取得してfloorIdを得る
+        if (state.blueprintId) {
+          const blueprint = data.blueprints.find(b => b.id === state.blueprintId);
+          floorId = blueprint?.floorId || 'unknown';
+        } else {
+          // returnPathからblueprintIdを抽出（/blueprints/:blueprintId形式の場合）
+          const match = state.returnPath.match(/\/blueprints\/([^/]+)/);
+          if (match) {
+            const blueprintId = match[1];
+            const blueprint = data.blueprints.find(b => b.id === blueprintId);
+            floorId = blueprint?.floorId || 'unknown';
+          } else {
+            floorId = 'reference';
+          }
+        }
+        imageType = 'references';
+
+        // B2にアップロード
+        console.log('[Camera] Uploading reference image to B2...');
+        const uploadResult = await uploadToB2({
+          propertyId,
+          floorId,
+          imageType,
+          imageId,
+          imageData: capturedImage,
+        });
+
+        if (!uploadResult.success) {
+          console.warn('[Camera] B2 upload failed:', uploadResult.error);
+        } else {
+          console.log('[Camera] B2 upload successful:', uploadResult.key);
+        }
+
+        navigate('/reference-images/input', {
+          state: {
+            propertyId: state.propertyId,
+            imageData: capturedImage,
+            returnPath: state.returnPath,
+          },
+        });
+      }
+    } catch (error) {
+      console.error('[Camera] Upload error:', error);
+      setUploadError('アップロードに失敗しました。ローカルに保存します。');
+      // エラーが発生しても3秒後に画面遷移
+      setTimeout(() => {
+        navigateAfterError();
+      }, 3000);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // エラー時の画面遷移処理
+  const navigateAfterError = () => {
     if (!capturedImage) return;
 
     if (mode === 'defect') {
-      // 不具合撮影の場合
       const state = location.state as {
         inspectionId: string;
         blueprintId: string;
@@ -209,7 +399,6 @@ const CameraPage: React.FC = () => {
       };
 
       if (state.isEdit && state.returnPath) {
-        // 編集時の撮影し直し
         navigate(state.returnPath, {
           state: {
             newImageData: capturedImage,
@@ -217,24 +406,36 @@ const CameraPage: React.FC = () => {
           },
         });
       } else {
-        // 新規不具合撮影
         navigate('/defect/input', {
           state: {
             inspectionId: state.inspectionId,
             blueprintId: state.blueprintId,
             imageData: capturedImage,
+            returnPath: state.returnPath, // キャンセル時の戻り先を渡す
           },
         });
       }
+    } else if (mode === 'standard') {
+      const { propertyId, photoType } = location.state as {
+        propertyId: string;
+        photoType: number;
+      };
+      navigate(`/properties/${propertyId}/standard-photos`, {
+        state: {
+          newPhoto: {
+            photoType,
+            imageData: capturedImage,
+          },
+        },
+      });
     } else {
-      // 参考画像撮影の場合
-      const { blueprintId, returnPath } = location.state as {
-        blueprintId: string;
+      const { propertyId, returnPath } = location.state as {
+        propertyId: string;
         returnPath: string;
       };
       navigate('/reference-images/input', {
         state: {
-          blueprintId,
+          propertyId,
           imageData: capturedImage,
           returnPath,
         },
@@ -244,21 +445,41 @@ const CameraPage: React.FC = () => {
 
   const handleCancel = () => {
     stopCamera();
-    if (mode === 'defect') {
-      const { blueprintId } = location.state as { blueprintId: string };
-      navigate(`/blueprints/${blueprintId}`);
+    
+    // location.stateからreturnPathを取得（すべてのモードで統一）
+    const state = location.state as {
+      returnPath?: string;
+      blueprintId?: string;
+      propertyId?: string;
+    } | null;
+
+    // returnPathが指定されている場合はそれを使用
+    if (state?.returnPath) {
+      navigate(state.returnPath);
+      return;
+    }
+
+    // returnPathがない場合のフォールバック
+    if (mode === 'defect' && state?.blueprintId) {
+      navigate(`/blueprints/${state.blueprintId}`);
+    } else if (mode === 'standard' && state?.propertyId) {
+      navigate(`/properties/${state.propertyId}/standard-photos`);
+    } else if (state?.propertyId) {
+      navigate(`/properties/${state.propertyId}`);
     } else {
-      const { returnPath } = location.state as { returnPath: string };
-      navigate(returnPath);
+      // 最終フォールバック：1つ前の画面に戻る
+      navigate(-1);
     }
   };
 
   return (
     <div className="min-h-screen bg-black flex flex-col">
-      <header className="bg-gray-900 text-white p-4">
-        <h1 className="text-xl font-bold text-center">
-          {mode === 'defect' ? '不具合撮影' : '参考画像撮影'}
-        </h1>
+      <header className="bg-gray-800 text-white shadow flex-shrink-0">
+        <div className="px-3 py-2 flex items-center justify-center">
+          <h1 className="text-sm font-bold whitespace-nowrap">
+            {mode === 'defect' ? '不具合撮影' : mode === 'standard' ? '定形写真撮影' : '通常撮影'}
+          </h1>
+        </div>
       </header>
 
       <main className="flex-1 flex flex-col items-center justify-center p-4">
@@ -276,11 +497,11 @@ const CameraPage: React.FC = () => {
                 <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-4">
                   <button
                     onClick={captureImage}
-                    className="w-16 h-16 bg-white rounded-full border-4 border-gray-300 hover:border-blue-500 transition"
+                    className="w-16 h-16 bg-white rounded-full border-4 border-gray-300 hover:border-emerald-500 transition"
                   />
                   <button
                     onClick={handleCancel}
-                    className="px-6 py-3 bg-gray-700 text-white rounded-lg hover:bg-gray-600"
+                    className="px-6 py-3 border-2 border-white text-white rounded-xl hover:bg-white hover:text-slate-900 transition-all duration-300 ease-out transform hover:scale-105 active:scale-95"
                   >
                     キャンセル
                   </button>
@@ -297,20 +518,47 @@ const CameraPage: React.FC = () => {
             <img
               src={capturedImage}
               alt="撮影した画像"
-              className="w-full h-auto rounded-lg mb-4"
+              className="w-full h-auto rounded-xl mb-4"
             />
+            
+            {/* アップロードエラー表示 */}
+            {uploadError && (
+              <div className="mb-4 p-3 bg-yellow-500/20 border border-yellow-500 rounded-xl text-yellow-200 text-sm">
+                ⚠️ {uploadError}
+              </div>
+            )}
+            
             <div className="flex gap-4">
               <button
                 onClick={retake}
-                className="flex-1 bg-gray-700 text-white py-3 rounded-lg font-semibold hover:bg-gray-600"
+                disabled={isUploading}
+                className={`flex-1 border-2 border-slate-600 text-slate-600 py-3 rounded-xl font-semibold transition-all duration-300 ease-out transform ${
+                  isUploading 
+                    ? 'opacity-50 cursor-not-allowed' 
+                    : 'hover:bg-slate-700 hover:text-white hover:border-slate-700 hover:scale-105 active:scale-95'
+                }`}
               >
                 撮影し直す
               </button>
               <button
                 onClick={handleConfirm}
-                className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700"
+                disabled={isUploading}
+                className={`flex-1 py-3 rounded-xl font-semibold transition-all duration-300 ease-out transform shadow-lg ${
+                  isUploading
+                    ? 'bg-slate-500 text-white cursor-not-allowed'
+                    : 'bg-emerald-600 text-white hover:bg-emerald-700 hover:scale-105 active:scale-95 hover:shadow-xl'
+                }`}
               >
-                確定
+                {isUploading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    アップロード中...
+                  </span>
+                ) : (
+                  '確定'
+                )}
               </button>
             </div>
           </div>

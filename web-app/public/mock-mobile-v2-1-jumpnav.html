@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>パターン1: ジャンプナビ - 現地調査チェックシート</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    * { -webkit-tap-highlight-color: transparent; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    .eval-btn { 
+      min-width: 44px; min-height: 44px; 
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 8px; font-weight: bold; font-size: 16px; transition: all 0.15s;
+      cursor: pointer;
+    }
+    .eval-btn:active { transform: scale(0.95); }
+    .eval-btn.selected { box-shadow: 0 2px 8px rgba(0,0,0,0.3); transform: scale(1.05); }
+    .eval-a { background: #dcfce7; color: #16a34a; border: 2px solid #16a34a; }
+    .eval-a.selected { background: #16a34a; color: white; }
+    .eval-b1 { background: #dbeafe; color: #2563eb; border: 2px solid #2563eb; }
+    .eval-b1.selected { background: #2563eb; color: white; }
+    .eval-b2 { background: #fef3c7; color: #d97706; border: 2px solid #d97706; }
+    .eval-b2.selected { background: #d97706; color: white; }
+    .eval-c { background: #fee2e2; color: #dc2626; border: 2px solid #dc2626; }
+    .eval-c.selected { background: #dc2626; color: white; }
+    .eval-na { background: #f1f5f9; color: #64748b; border: 2px solid #94a3b8; }
+    .eval-na.selected { background: #64748b; color: white; }
+    .jump-nav::-webkit-scrollbar { display: none; }
+    .jump-nav { scrollbar-width: none; }
+    .jump-tab { transition: all 0.2s; }
+    .jump-tab.active { background: #ecfdf5; border-bottom: 3px solid #10b981; color: #047857; }
+    .category-header { scroll-margin-top: 100px; }
+    .toast { animation: slideUp 0.3s ease; }
+    @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  </style>
+</head>
+<body class="bg-slate-100 min-h-screen pb-24">
+  <!-- ヘッダー -->
+  <header class="sticky top-0 bg-white z-20 shadow-sm">
+    <div class="px-4 py-2 flex justify-between items-center border-b">
+      <a href="mock-list.html" class="text-slate-400 text-sm flex items-center gap-1">← 戻る</a>
+      <span class="font-bold text-slate-800 text-sm">現地調査チェックシート</span>
+      <span id="totalProgress" class="text-emerald-600 text-sm font-bold">0/101</span>
+    </div>
+    
+    <!-- ジャンプナビ -->
+    <div id="jumpNav" class="jump-nav flex overflow-x-auto bg-slate-50 border-b"></div>
+  </header>
+
+  <!-- コンテンツ -->
+  <div id="content" class="p-3 space-y-4"></div>
+
+  <!-- 評価追加モーダル -->
+  <div id="addModal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-end">
+    <div class="bg-white rounded-t-3xl w-full p-5 pb-8 max-h-[85vh] overflow-y-auto">
+      <div class="w-12 h-1.5 bg-slate-300 rounded-full mx-auto mb-4"></div>
+      <div class="flex items-start gap-2 mb-2">
+        <span id="modalNum" class="bg-blue-600 text-white text-xs px-2 py-1 rounded font-bold"></span>
+        <h3 id="modalTitle" class="text-lg font-bold text-slate-800"></h3>
+      </div>
+      <p id="modalDesc" class="text-sm text-slate-500 mb-4"></p>
+      
+      <div class="mb-4">
+        <label class="text-xs text-slate-500 mb-1 block">場所メモ（任意）</label>
+        <input type="text" id="locationMemo" placeholder="例：北側、2階、東側排水桝など" 
+               class="w-full border-2 border-slate-200 rounded-xl px-4 py-3 text-base focus:border-emerald-500 focus:outline-none">
+      </div>
+      
+      <div class="mb-4">
+        <label class="text-xs text-slate-500 mb-2 block">劣化進行度合い評価</label>
+        <div class="grid grid-cols-5 gap-2">
+          <button onclick="selectEval('a')" class="eval-btn eval-a py-3 flex-col" data-eval="a">
+            <span class="text-lg">a</span>
+            <span class="text-[8px]">概ね良好</span>
+          </button>
+          <button onclick="selectEval('b1')" class="eval-btn eval-b1 py-3 flex-col" data-eval="b1">
+            <span class="text-lg">b1</span>
+            <span class="text-[8px]">進行(軽度)</span>
+          </button>
+          <button onclick="selectEval('b2')" class="eval-btn eval-b2 py-3 flex-col" data-eval="b2">
+            <span class="text-lg">b2</span>
+            <span class="text-[8px]">進行(中度)</span>
+          </button>
+          <button onclick="selectEval('c')" class="eval-btn eval-c py-3 flex-col" data-eval="c">
+            <span class="text-lg">c</span>
+            <span class="text-[8px]">著しく進行</span>
+          </button>
+          <button onclick="selectEval('na')" class="eval-btn eval-na py-3 flex-col" data-eval="na">
+            <span class="text-lg">−</span>
+            <span class="text-[8px]">対象外</span>
+          </button>
+        </div>
+      </div>
+      
+      <div class="flex gap-3">
+        <button onclick="closeModal()" class="flex-1 border-2 border-slate-300 text-slate-600 py-3 rounded-xl font-bold">
+          キャンセル
+        </button>
+        <button id="addBtn" onclick="addEvaluation()" disabled class="flex-1 bg-slate-300 text-white py-3 rounded-xl font-bold">
+          追加
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- トースト -->
+  <div id="toast" class="hidden fixed bottom-20 left-4 right-4 bg-slate-800 text-white px-4 py-3 rounded-xl text-sm text-center toast z-50"></div>
+
+  <!-- フッター -->
+  <div class="fixed bottom-0 left-0 right-0 p-3 bg-white border-t shadow-lg z-30">
+    <button onclick="saveAndReturn()" class="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2">
+      <span>💾</span> 保存して図面に戻る
+    </button>
+  </div>
+
+  <script>
+    // 実際の検査データ（現地調査チェックシートより）
+    const inspectionData = {
+      categories: [
+        {
+          id: 'cat1',
+          name: '外部① 敷地及び地盤',
+          shortName: '敷地・地盤',
+          items: [
+            { id: 'item1', num: 1, name: '地盤', desc: '地盤沈下等による不陸、傾斜等の有無' },
+            { id: 'item2', num: 2, name: '敷地', desc: '敷地内の排水桝の破損等の有無（側溝、マンホール及び桝の状況）' },
+            { id: 'item3', num: 3, name: '擁壁', desc: '擁壁の劣化及び損傷の有無' },
+            { id: 'item4', num: 4, name: '水抜きパイプ', desc: '擁壁の水抜きパイプの維持保全の有無' },
+            { id: 'item5', num: 5, name: '駐車場', desc: '駐車場内のひび割れ、陥没の恐れの有無' },
+            { id: 'item6', num: 6, name: '駐輪場', desc: '駐輪場内のひび割れ、陥没の恐れの有無' },
+            { id: 'item7', num: 7, name: '建物の周囲', desc: '隣接建物の倒壊、接触の恐れの有無' },
+          ]
+        },
+        {
+          id: 'cat2',
+          name: '外部② 各点検口内',
+          shortName: '点検口内',
+          items: [
+            { id: 'item8', num: 8, name: '床下点検口', desc: '基礎立ち上り及び底盤の著しいひび割れ、劣化又は欠損等の有無（幅0.5mm、深さ20mm程度）', sub: '木造・鉄骨・RC' },
+            { id: 'item9', num: 9, name: 'スコープ調査', desc: '広範囲にまたぐひび割れの有無', sub: '点検口が使用できない場合' },
+            { id: 'item10', num: 10, name: 'コンクリート劣化', desc: 'コンクリートの著しい劣化の有無（ジャンカ、豆板又は幅0.5mm未満のひび割れ等）' },
+            { id: 'item11', num: 11, name: 'さび汁・白華', desc: 'さび汁（白華を含む）を伴うひび割れ、欠損の有無' },
+            { id: 'item12', num: 12, name: '鉄筋露出', desc: '鉄筋の露出の有無' },
+            { id: 'item13', num: 13, name: '設備配管貫通部', desc: '設備配管の基礎貫通部の隙間の有無', sub: 'スコープ調査（東/西/南/北）' },
+            { id: 'item14', num: 14, name: '基礎底盤水染み', desc: '基礎底盤に水たまり又は水染み跡の有無', sub: '基礎形式：ベタ基礎/布基礎/独立基礎/杭基礎/その他' },
+            { id: 'item15', num: 15, name: '土台・床組', desc: '土台及び床組に著しいひび割れ、劣化又は欠損の有無' },
+            { id: 'item16', num: 16, name: '木部腐朽', desc: '木部の腐朽、カビの付着の有無（表面上のカビはb2評価）' },
+            { id: 'item17', num: 17, name: '基礎天端隙間', desc: '基礎天端（基礎パッキン）と土台の間に著しい隙間、または非構造材が挟まれていない事の有無', sub: '換気方法：換気口/基礎パッキン/無' },
+            { id: 'item18', num: 18, name: '床組染み跡', desc: '床組に染み跡の有無' },
+            { id: 'item19', num: 19, name: '水漏れ・変形', desc: '水漏れ、変形、等の有無', sub: '断熱工法：床断熱工法/基礎断熱工法/無/不明' },
+            { id: 'item20', num: 20, name: '蟻害', desc: '蟻害（木造・鉄骨のみ）の有無' },
+            { id: 'item21', num: 21, name: '配管配線接続部', desc: '配管及び配線接続部の劣化、脱落の有無' },
+            { id: 'item22', num: 22, name: '天井下地材', desc: '天井の下地材（せっこうボード等）のひび割れ、欠損、浮き、はらみの有無', sub: '小屋裏・天井点検口（木造・鉄骨・RC）' },
+            { id: 'item23', num: 23, name: '小屋組劣化', desc: '小屋組に著しいひび割れ、劣化又は欠損の有無（鉄骨造の場合、溶接部分の劣化・防錆塗装の劣化等を含む）' },
+            { id: 'item24', num: 24, name: '横架材欠込み', desc: '横架材の引っ張り側に欠込みの有無。貫通口がある場合、口径は梁成の1/4以下かつ梁成の上下1/3の箇所は避けている事' },
+            { id: 'item25', num: 25, name: '雨漏り跡・腐朽', desc: '小屋組に雨漏りの跡、腐朽の有無' },
+            { id: 'item26', num: 26, name: '配管配線接続', desc: '配管及び配線の接続状況', sub: '小屋裏・軒裏換気口の設置：設置有/設置無/不明' },
+            { id: 'item27', num: 27, name: 'ダクト接続', desc: 'ダクトの接続状況（湿気が小屋裏・天井内に滞留していないか）' },
+            { id: 'item28', num: 28, name: '耐火被覆', desc: '耐火被覆にひび割れ、欠損、剥離などの有無（鉄骨造のみ）', sub: '小屋裏・天井点検口（鉄骨用）' },
+            { id: 'item29', num: 29, name: '鉄骨部サビ', desc: '鉄骨部のサビの有無（防錆措置が講じられているか）（鉄骨造のみ）' },
+          ]
+        },
+        {
+          id: 'cat3',
+          name: '外部③ 建築物外部（基礎）',
+          shortName: '基礎',
+          items: [
+            { id: 'item30', num: 30, name: 'コンクリート直仕上げ', desc: '幅0.5mm以上のひび割れ、0.5mm未満であっても、広範囲に及ぶひび割れの有無', sub: '仕上材の種類：コンクリート直仕上げ/モルタル仕上げ/その他塗り仕上げ/その他' },
+            { id: 'item31', num: 31, name: '欠損', desc: '深さ20mm以上の欠損又は、深さが20mm未満であっても広範囲に及ぶ欠損の有無' },
+            { id: 'item32', num: 32, name: 'モルタル仕上げひび割れ', desc: '仕上部分を貫通して基礎コンクリート躯体にまで達するひび割れの有無', sub: 'モルタル他塗り仕上げ' },
+            { id: 'item33', num: 33, name: 'モルタル欠損', desc: '仕上部分から下地の基礎コンクリート躯体まで連続し、コンクリート部分における深さが20mm以上の欠損の有無' },
+            { id: 'item34', num: 34, name: '仕上げ剥離', desc: '仕上部分が広範囲にわたり下地材から剥離した等の、基礎コンクリート躯体の露出状態の有無' },
+            { id: 'item35', num: 35, name: 'その他仕上げ', desc: '上記コンクリート直仕上げ、又は、モルタル仕上げその他塗り仕上げにおける劣化事象等に準じるものの有無' },
+            { id: 'item36', num: 36, name: '鉄筋露出', desc: '鉄筋の露出の有無' },
+            { id: 'item37', num: 37, name: '基礎沈下', desc: '基礎の沈下等の有無' },
+            { id: 'item38', num: 38, name: '基礎天端高さ', desc: '基礎天端と地盤面との平均的高さ', sub: '30cm＞ / 30cm≦ / 40cm≦' },
+            { id: 'item39', num: 39, name: '設備配管隙間', desc: '設備配管の基礎貫通部の隙間の有無' },
+          ]
+        },
+        {
+          id: 'cat4',
+          name: '外部③ 建築物外部（外壁）',
+          shortName: '外壁',
+          items: [
+            { id: 'item40', num: 40, name: '外壁ひび割れ', desc: '幅0.5mm以上のひび割れ、又は広範囲に及ぶひび割れ（塗装仕上げ等部分のひび割れは除く）の有無', sub: '【木造】外壁の種類：吹付タイル/モルタル塗り/サイディングボード/その他板状/タイル貼り' },
+            { id: 'item41', num: 41, name: '外壁欠損', desc: '深さ20mm以上の欠損、又は広範囲に及ぶ欠損（塗装仕上げ等部分の欠損は除く）の有無' },
+            { id: 'item42', num: 42, name: 'コンクリート劣化', desc: 'コンクリートの著しい劣化の有無（ジャンカ又は幅0.5mm未満のひび割れ、深さ20mm未満の欠損が広範囲に発生していない事）', sub: 'コンクリート打ち放し' },
+            { id: 'item43', num: 43, name: 'さび汁・白華', desc: 'さび汁（白華を含む）を伴うひび割れ、欠損の有無' },
+            { id: 'item44', num: 44, name: '鉄筋露出', desc: '鉄筋の露出の有無', sub: '柱サイズ（不明の場合は空欄）：105≧/105＜/120≦' },
+            { id: 'item45', num: 45, name: '下地材劣化', desc: '下地材まで到達するひび割れ、欠損、浮き、はらみ又は剥落の有無', sub: '外壁：通気無/通気工法/湿式/乾式' },
+            { id: 'item46', num: 46, name: 'タイル劣化', desc: '複数のタイル等にまたがったひび割れ又は欠損の有無', sub: 'タイル塗装、仕上貼り構造' },
+            { id: 'item47', num: 47, name: '鉄筋露出(RC)', desc: '鉄筋の露出の有無', sub: '【鉄筋コンクリート造】コンクリート面仕上材の種類' },
+            { id: 'item48', num: 48, name: '仕上材せり上がり', desc: '仕上材のせり上がり、膨らみ、浮き、広範囲に及ぶ剥がれの有無', sub: '※地上及び廊下階段から俯瞰できる範囲、及び打診棒により地上から2m内外の届く範囲' },
+            { id: 'item49', num: 49, name: '板状仕上材割れ', desc: '板状の仕上材の全幅に渡る割れの有無', sub: 'サイディングその他板状' },
+            { id: 'item50', num: 50, name: '板状仕上材かけ', desc: '板状の仕上材の一部のかけ損じや、下地材が露出している状態の有無' },
+            { id: 'item51', num: 51, name: '金属板状仕上材錆', desc: '金属である板状の仕上材に著しい錆が認められ、欠損又は穴あきに至るおそれのある状態の有無', sub: '【鉄骨】外壁の種類：PCパネル/ALC板吹付仕上/カーテンウォール/その他湿式工法/乾式工法' },
+            { id: 'item52', num: 52, name: '鉄筋露出(鉄骨)', desc: '鉄筋の露出の有無' },
+            { id: 'item53', num: 53, name: 'シーリング', desc: 'シーリング材の破断、欠損又は著しいひび割れ、硬化の有無（開口部又は外部付属品との取合部も含む）' },
+            { id: 'item54', num: 54, name: '建具周囲隙間', desc: '建具の周囲に隙間の有無', sub: '◆共通（複数箇所の平均）庇の出（目測）：300＞/300≦/450≦/900≦' },
+            { id: 'item55', num: 55, name: '軒裏水染み', desc: '軒裏の水染み・破損の有無', sub: '雨水' },
+            { id: 'item56', num: 56, name: '雨樋破損', desc: '雨樋の破損やカビ等の有無', sub: '軒の出（目測）：300＞/300≦/450≦/900≦' },
+            { id: 'item57', num: 57, name: '設備配管外壁貫通部', desc: '設備配管(ガス・給水・給湯・給排気)、エアコン冷媒管等の外壁貫通部の隙間の有無' },
+          ]
+        },
+        {
+          id: 'cat5',
+          name: '外部③ 共用部（廊下・階段等）',
+          shortName: '廊下・階段',
+          items: [
+            { id: 'item58', num: 58, name: '支持部材', desc: '支持部材(手摺、支柱、梁等)の著しいぐらつき、ひび割れ又は劣化(さび汁等又は鉄筋の露出を含む)の有無', sub: '共用部の廊下・階段・バルコニー・エントランスホール【構造】' },
+            { id: 'item59', num: 59, name: '仕上状況', desc: '仕上状況・ひび割れ・欠損・水染み等の有無' },
+            { id: 'item60', num: 60, name: '天井シーリング', desc: 'シーリングの破断の有無', sub: '【天井】' },
+            { id: 'item61', num: 61, name: '照明器具', desc: '照明器具のカバー等の劣化の有無' },
+            { id: 'item62', num: 62, name: 'ぐらつき・錆', desc: 'ぐらつき・錆の有無' },
+            { id: 'item63', num: 63, name: '手摺壁ひび割れ', desc: 'ひび割れ・欠損等の有無', sub: '【手摺壁】' },
+            { id: 'item64', num: 64, name: '手摺壁シーリング', desc: 'シーリングの破断、硬化の有無' },
+            { id: 'item65', num: 65, name: '手摺笠木', desc: '手摺、笠木の劣化、コケ等の有無', sub: '【仕上】' },
+            { id: 'item66', num: 66, name: '仕上ひび割れ', desc: '仕上状況・ひび割れ・欠損等の有無' },
+            { id: 'item67', num: 67, name: '防水層', desc: '防水層（排水口廻り、サッシ下端等）の著しいひび割れ、劣化、欠損又は水切り金物の劣化等の有無', sub: '【床】' },
+            { id: 'item68', num: 68, name: '排水勾配', desc: '屋外廊下の排水勾配は排水溝側へ取れているか' },
+            { id: 'item69', num: 69, name: '排水溝よごれ', desc: '排水溝のよごれの有無' },
+            { id: 'item70', num: 70, name: '排水溝堆積物', desc: '排水溝、目皿の堆積物、劣化等の有無' },
+            { id: 'item71', num: 71, name: '床シーリング', desc: 'シーリングの破断、硬化の有無' },
+            { id: 'item72', num: 72, name: '屋外階段支柱床', desc: '支柱、床、手摺の著しいぐらつき、傾き、腐朽、錆の有無　又、塗装の剥離の有無', sub: '屋外階段(木造・鉄骨)階段各部の劣化及び損傷の状況' },
+            { id: 'item73', num: 73, name: '階段裏側', desc: '階段裏側の被覆・塗装の剥離、錆の有無', sub: '設置：該当有/該当無' },
+            { id: 'item74', num: 74, name: '接合部金物', desc: '木造の場合：接合部金物の腐食の有無' },
+          ]
+        },
+        {
+          id: 'cat6',
+          name: '外部④ 屋根及び屋上',
+          shortName: '屋根・屋上',
+          items: [
+            { id: 'item75', num: 75, name: '屋根劣化', desc: '屋根の劣化及び損傷の有無', sub: '【屋根】屋根仕様：陸屋根/金属板葺き/トタン/スレート瓦屋根/桟瓦葺き/その他' },
+            { id: 'item76', num: 76, name: '屋根ふき材', desc: '屋根ふき材の割れ、腐食等の劣化、コケの繁茂の有無' },
+            { id: 'item77', num: 77, name: '緊結金物', desc: '緊結金物、雪止め金物の割れ、腐食等の劣化、コケの繁茂の有無' },
+            { id: 'item78', num: 78, name: '軒樋', desc: '軒樋の破損の有無', sub: '撮影棒による共用廊下等からの画像確認：実施可/実施不可' },
+            { id: 'item79', num: 79, name: 'アンテナ等', desc: 'アンテナ等の機器の傾き、破損の有無' },
+            { id: 'item80', num: 80, name: '軒裏水染み', desc: '軒裏の水染み、破損の有無' },
+            { id: 'item81', num: 81, name: '屋上面劣化', desc: '屋上面の劣化及び損傷の有無', sub: '【屋上】防水工法：アスファルト防水/シート防水/塗膜防水/FRP防水/その他' },
+            { id: 'item82', num: 82, name: 'ひび割れ反り', desc: '歩行上危険なひび割れ、若しくは反りの有無' },
+            { id: 'item83', num: 83, name: '伸縮目地材', desc: '伸縮目地材が欠損し、植物が繁茂の有無' },
+            { id: 'item84', num: 84, name: '防水層劣化', desc: '防水層、保護層のひび割れ、浮き、欠損、劣化の有無', sub: '階段から屋上に登れる場合は目視での調査、不可の場合は撮影棒による共用廊下下等からの画像確認' },
+            { id: 'item85', num: 85, name: 'パラペット', desc: 'パラペットの立ち上がり面の劣化及び損傷の有無' },
+            { id: 'item86', num: 86, name: '金属笠木', desc: '金属笠木の劣化及び損傷の有無', sub: '屋上にて目視確認/撮影棒による画像確認/実施不可' },
+            { id: 'item87', num: 87, name: '手摺ぐらつき', desc: '手摺のぐらつき、錆の発生の有無' },
+            { id: 'item88', num: 88, name: '笠木結合部', desc: '笠木結合部の緩いみ、変形の有無' },
+            { id: 'item89', num: 89, name: '排水溝ドレーン', desc: '排水溝（ドレーンを含む）の詰まり、コケの繁茂、ひび割れ、浮きの有無' },
+            { id: 'item90', num: 90, name: '水たまり', desc: '水たまりの有無' },
+            { id: 'item91', num: 91, name: '架台支持部', desc: '架台・支持部分のひび割れ、破損の有無' },
+          ]
+        },
+        {
+          id: 'cat7',
+          name: '外部⑤ 共用部（管理状況）',
+          shortName: '管理状況',
+          evalType: 'manage',
+          items: [
+            { id: 'item92', num: 92, name: '内装・郵便受け', desc: '郵便受けの美観　ラベルシールの剥がれ・へこみ(施錠の調査は対象外)はないか、内部の清掃状況(開閉できる場合のみ)は良好か', sub: '日常の清掃や、点検実施の有無' },
+            { id: 'item93', num: 93, name: '共用廊下・ごみ置場', desc: '共用廊下や、ごみ置き場(屋外のみ)清掃・管理の状態は良好か' },
+            { id: 'item94', num: 94, name: '駐輪場・駐車場', desc: '駐輪場・駐車場(平置きのみ)・スロープの清掃・管理の状態は良好か' },
+          ]
+        },
+        {
+          id: 'cat8',
+          name: '鉄筋・シュミットハンマー',
+          shortName: '鉄筋・強度',
+          items: [
+            { id: 'item95', num: 95, name: '鉄筋確認', desc: '鉄筋の有無と配筋のピッチの確認（建物状況調査方法に準拠）', sub: '鉄筋の有無（検査済証の交付を受けていない場合のみ実施）' },
+            { id: 'item96', num: 96, name: 'シュミットハンマー', desc: '強度低下について確認（建物状況調査方法に準拠）', sub: 'シュミットハンマー（非破壊圧縮強度）調査の実施（旧耐震の場合のみ実施）' },
+          ]
+        },
+        {
+          id: 'cat9',
+          name: 'その他 違法性関係',
+          shortName: '違法性',
+          items: [
+            { id: 'item97', num: 97, name: '構造荷重計算不適合', desc: '増築等による構造荷重計算不適合の懸念の有無（上階に増築している場合等）', sub: '法不適合等の有無（違法性）※資料で確認出来ない懸念・不整合' },
+            { id: 'item98', num: 98, name: '地震倒壊懸念', desc: '増築、増床部分に地震による倒壊等の懸念の有無（別棟接続等）' },
+            { id: 'item99', num: 99, name: '用途不整合', desc: '検査済証、謄本と実際の使用用途との大きな不整合の有無' },
+            { id: 'item100', num: 100, name: '形状不整合', desc: '検査済証、図面、謄本と階数や、高さ、形状の不整合の有無' },
+            { id: 'item101', num: 101, name: '実測値不整合', desc: '建物形状の実測値との不整合（建物外周の一片の長さを実測した、平面図との比較）' },
+          ]
+        }
+      ]
+    };
+
+    // 状態管理
+    let evaluations = {};
+    let currentItemId = null;
+    let selectedEval = null;
+
+    // 初期化
+    function init() {
+      loadFromStorage();
+      renderJumpNav();
+      renderContent();
+      updateProgress();
+    }
+
+    function loadFromStorage() {
+      const saved = localStorage.getItem('kennet_inspection_v2');
+      if (saved) {
+        evaluations = JSON.parse(saved);
+      }
+    }
+
+    function saveToStorage() {
+      localStorage.setItem('kennet_inspection_v2', JSON.stringify(evaluations));
+    }
+
+    function renderJumpNav() {
+      const nav = document.getElementById('jumpNav');
+      nav.innerHTML = inspectionData.categories.map((cat, idx) => {
+        const count = getCategoryProgress(cat);
+        return `
+          <button onclick="jumpTo('${cat.id}')" 
+                  id="tab-${cat.id}"
+                  class="jump-tab px-3 py-2 text-xs whitespace-nowrap flex-shrink-0 border-b-3 border-transparent ${idx === 0 ? 'active' : ''}">
+            <div class="font-bold">${cat.shortName}</div>
+            <div class="text-[10px] ${count.done > 0 ? 'text-emerald-600' : 'text-slate-400'}">${count.done}/${count.total}</div>
+          </button>
+        `;
+      }).join('');
+    }
+
+    function getCategoryProgress(category) {
+      let done = 0;
+      category.items.forEach(item => {
+        if (evaluations[item.id] && evaluations[item.id].length > 0) done++;
+      });
+      return { done, total: category.items.length };
+    }
+
+    function updateProgress() {
+      let totalDone = 0, totalItems = 0;
+      inspectionData.categories.forEach(cat => {
+        const p = getCategoryProgress(cat);
+        totalDone += p.done;
+        totalItems += p.total;
+      });
+      document.getElementById('totalProgress').textContent = `${totalDone}/${totalItems}`;
+      
+      inspectionData.categories.forEach(cat => {
+        const count = getCategoryProgress(cat);
+        const tab = document.getElementById(`tab-${cat.id}`);
+        if (tab) {
+          tab.querySelector('div:last-child').textContent = `${count.done}/${count.total}`;
+          tab.querySelector('div:last-child').className = `text-[10px] ${count.done > 0 ? 'text-emerald-600' : 'text-slate-400'}`;
+        }
+      });
+    }
+
+    function renderContent() {
+      const content = document.getElementById('content');
+      content.innerHTML = inspectionData.categories.map(cat => {
+        const progress = getCategoryProgress(cat);
+        return `
+          <div id="${cat.id}" class="category-header">
+            <div class="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-3 rounded-t-xl font-bold flex justify-between items-center">
+              <span class="text-sm">${cat.name}</span>
+              <span class="text-xs bg-white/20 px-2 py-1 rounded">${progress.done}/${progress.total}</span>
+            </div>
+            <div class="bg-white rounded-b-xl shadow-sm overflow-hidden divide-y">
+              ${cat.items.map(item => renderItem(item, cat.evalType)).join('')}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderItem(item, evalType) {
+      const evals = evaluations[item.id] || [];
+      const hasEvals = evals.length > 0;
+      const bgColor = hasEvals ? 'bg-white' : 'bg-slate-50';
+      
+      return `
+        <div class="${bgColor} p-3">
+          <div class="flex justify-between items-start mb-2">
+            <div class="flex-1">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-xs text-white bg-slate-500 px-1.5 py-0.5 rounded">${item.num}</span>
+                <h4 class="font-bold text-slate-800 text-sm">${item.name}</h4>
+                ${hasEvals ? `<span class="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">${evals.length}件</span>` : ''}
+              </div>
+              <p class="text-xs text-slate-500 mt-1">${item.desc}</p>
+              ${item.sub ? `<p class="text-xs text-blue-500 mt-0.5">${item.sub}</p>` : ''}
+            </div>
+          </div>
+          
+          ${hasEvals ? `
+            <div class="space-y-2 mb-2">
+              ${evals.map((e, idx) => renderEvaluation(item.id, e, idx)).join('')}
+            </div>
+          ` : ''}
+          
+          <button onclick="openModal('${item.id}')" 
+                  class="${hasEvals ? 'w-full border-2 border-dashed border-slate-300 rounded-lg py-2 text-sm text-slate-500' : 'w-full bg-emerald-50 border-2 border-emerald-400 rounded-lg py-3 text-sm text-emerald-700 font-bold'}">
+            + ${hasEvals ? '追加' : '評価を追加'}
+          </button>
+        </div>
+      `;
+    }
+
+    function renderEvaluation(itemId, evalData, idx) {
+      const bgClass = { 'a': 'bg-emerald-50', 'b1': 'bg-blue-50', 'b2': 'bg-amber-50', 'c': 'bg-red-50', 'na': 'bg-slate-100' }[evalData.eval] || 'bg-slate-50';
+      const btnClass = { 'a': 'bg-emerald-500', 'b1': 'bg-blue-500', 'b2': 'bg-amber-500', 'c': 'bg-red-500', 'na': 'bg-slate-400' }[evalData.eval] || 'bg-slate-400';
+      const nums = '①②③④⑤⑥⑦⑧⑨⑩';
+      
+      return `
+        <div class="flex items-center gap-2 ${bgClass} rounded-lg p-2">
+          <span class="text-xs text-slate-400">${nums[idx] || idx+1}</span>
+          <span class="${btnClass} text-white text-xs px-2 py-1 rounded font-bold">${evalData.eval === 'na' ? '−' : evalData.eval}</span>
+          <span class="text-xs text-slate-600 flex-1 truncate">${evalData.memo || '−'}</span>
+          ${evalData.hasPhoto ? '<span class="text-xs bg-amber-500 text-white px-1.5 py-0.5 rounded">📷</span>' : ''}
+          <button onclick="removeEvaluation('${itemId}', ${idx})" class="text-slate-400 hover:text-red-500 text-sm px-1">✕</button>
+        </div>
+      `;
+    }
+
+    function jumpTo(catId) {
+      document.getElementById(catId).scrollIntoView({ behavior: 'smooth' });
+      document.querySelectorAll('.jump-tab').forEach(tab => tab.classList.remove('active'));
+      document.getElementById(`tab-${catId}`).classList.add('active');
+    }
+
+    function openModal(itemId) {
+      currentItemId = itemId;
+      selectedEval = null;
+      
+      let itemInfo = null;
+      inspectionData.categories.forEach(cat => {
+        cat.items.forEach(item => { if (item.id === itemId) itemInfo = item; });
+      });
+      
+      document.getElementById('modalNum').textContent = itemInfo.num;
+      document.getElementById('modalTitle').textContent = itemInfo.name;
+      document.getElementById('modalDesc').textContent = itemInfo.desc;
+      document.getElementById('locationMemo').value = '';
+      
+      document.querySelectorAll('#addModal .eval-btn').forEach(btn => btn.classList.remove('selected'));
+      document.getElementById('addBtn').disabled = true;
+      document.getElementById('addBtn').className = 'flex-1 bg-slate-300 text-white py-3 rounded-xl font-bold';
+      
+      document.getElementById('addModal').classList.remove('hidden');
+    }
+
+    function closeModal() {
+      document.getElementById('addModal').classList.add('hidden');
+    }
+
+    function selectEval(evalType) {
+      selectedEval = evalType;
+      document.querySelectorAll('#addModal .eval-btn').forEach(btn => {
+        btn.classList.remove('selected');
+        if (btn.dataset.eval === evalType) btn.classList.add('selected');
+      });
+      document.getElementById('addBtn').disabled = false;
+      document.getElementById('addBtn').className = 'flex-1 bg-emerald-600 text-white py-3 rounded-xl font-bold';
+    }
+
+    function addEvaluation() {
+      if (!currentItemId || !selectedEval) return;
+      const memo = document.getElementById('locationMemo').value.trim();
+      if (!evaluations[currentItemId]) evaluations[currentItemId] = [];
+      evaluations[currentItemId].push({ eval: selectedEval, memo, timestamp: Date.now() });
+      saveToStorage();
+      renderContent();
+      updateProgress();
+      closeModal();
+      showToast('評価を追加しました');
+    }
+
+    function removeEvaluation(itemId, idx) {
+      if (confirm('この評価を削除しますか？')) {
+        evaluations[itemId].splice(idx, 1);
+        if (evaluations[itemId].length === 0) delete evaluations[itemId];
+        saveToStorage();
+        renderContent();
+        updateProgress();
+        showToast('削除しました');
+      }
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.remove('hidden');
+      setTimeout(() => t.classList.add('hidden'), 2000);
+    }
+
+    function saveAndReturn() {
+      saveToStorage();
+      showToast('保存しました');
+    }
+
+    // スクロール監視
+    let ticking = false;
+    window.addEventListener('scroll', () => {
+      if (!ticking) {
+        requestAnimationFrame(() => {
+          const scrollPos = window.scrollY + 120;
+          let activeId = inspectionData.categories[0].id;
+          inspectionData.categories.forEach(cat => {
+            const el = document.getElementById(cat.id);
+            if (el && el.offsetTop <= scrollPos) activeId = cat.id;
+          });
+          document.querySelectorAll('.jump-tab').forEach(tab => tab.classList.remove('active'));
+          document.getElementById(`tab-${activeId}`)?.classList.add('active');
+          document.getElementById(`tab-${activeId}`)?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+          ticking = false;
+        });
+        ticking = true;
+      }
+    });
+
+    init();
+  </script>
+</body>
+</html>

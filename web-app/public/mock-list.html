@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>現地調査チェックシート - UIモック一覧</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    .pattern-card { transition: all 0.2s; }
+    .pattern-card:hover { transform: translateY(-4px); box-shadow: 0 12px 40px rgba(0,0,0,0.1); }
+  </style>
+</head>
+<body class="bg-gradient-to-br from-slate-100 to-slate-200 min-h-screen py-8 px-4">
+  <div class="max-w-5xl mx-auto">
+    <!-- ヘッダー -->
+    <div class="text-center mb-10">
+      <div class="inline-block bg-white px-6 py-3 rounded-2xl shadow-sm mb-4">
+        <span class="text-4xl">📋</span>
+      </div>
+      <h1 class="text-3xl font-bold text-slate-800 mb-2">現地調査チェックシート UIモック</h1>
+      <p class="text-slate-600 max-w-2xl mx-auto">
+        実際の検査項目書（101項目・9カテゴリ）を基にした5つのUIパターンです。<br>
+        LocalStorageで入力データを共有しているので、パターン間でデータが引き継がれます。
+      </p>
+    </div>
+
+    <!-- データ構造の説明 -->
+    <div class="bg-white rounded-2xl p-6 shadow-sm mb-8">
+      <h2 class="font-bold text-lg text-slate-800 mb-4">📊 検査データ構造（9カテゴリ・101項目）</h2>
+      <div class="grid md:grid-cols-3 gap-3 text-sm">
+        <div class="bg-teal-50 rounded-lg p-3 border-l-4 border-teal-500">
+          <div class="font-bold text-teal-700">外部① 敷地及び地盤</div>
+          <div class="text-teal-600 text-xs mt-1">No.1-7（7項目）地盤・敷地・擁壁など</div>
+        </div>
+        <div class="bg-blue-50 rounded-lg p-3 border-l-4 border-blue-500">
+          <div class="font-bold text-blue-700">外部② 各点検口内</div>
+          <div class="text-blue-600 text-xs mt-1">No.8-29（22項目）床下・小屋裏など</div>
+        </div>
+        <div class="bg-indigo-50 rounded-lg p-3 border-l-4 border-indigo-500">
+          <div class="font-bold text-indigo-700">外部③ 基礎</div>
+          <div class="text-indigo-600 text-xs mt-1">No.30-39（10項目）コンクリート・モルタルなど</div>
+        </div>
+        <div class="bg-purple-50 rounded-lg p-3 border-l-4 border-purple-500">
+          <div class="font-bold text-purple-700">外部③ 外壁</div>
+          <div class="text-purple-600 text-xs mt-1">No.40-57（18項目）ひび割れ・シーリングなど</div>
+        </div>
+        <div class="bg-pink-50 rounded-lg p-3 border-l-4 border-pink-500">
+          <div class="font-bold text-pink-700">外部③ 廊下・階段等</div>
+          <div class="text-pink-600 text-xs mt-1">No.58-74（17項目）手摺・排水など</div>
+        </div>
+        <div class="bg-orange-50 rounded-lg p-3 border-l-4 border-orange-500">
+          <div class="font-bold text-orange-700">外部④ 屋根及び屋上</div>
+          <div class="text-orange-600 text-xs mt-1">No.75-91（17項目）屋根材・防水など</div>
+        </div>
+        <div class="bg-cyan-50 rounded-lg p-3 border-l-4 border-cyan-500">
+          <div class="font-bold text-cyan-700">外部⑤ 管理状況</div>
+          <div class="text-cyan-600 text-xs mt-1">No.92-94（3項目）清掃・管理など</div>
+        </div>
+        <div class="bg-slate-50 rounded-lg p-3 border-l-4 border-slate-500">
+          <div class="font-bold text-slate-700">鉄筋・シュミットハンマー</div>
+          <div class="text-slate-600 text-xs mt-1">No.95-96（2項目）鉄筋確認・強度など</div>
+        </div>
+        <div class="bg-red-50 rounded-lg p-3 border-l-4 border-red-500">
+          <div class="font-bold text-red-700">その他 違法性関係</div>
+          <div class="text-red-600 text-xs mt-1">No.97-101（5項目）増築・用途など</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 機能説明 -->
+    <div class="bg-emerald-50 rounded-2xl p-6 border border-emerald-200 mb-8">
+      <h2 class="font-bold text-lg text-emerald-800 mb-3">✨ 共通機能</h2>
+      <div class="grid md:grid-cols-2 gap-4 text-sm">
+        <div class="flex items-start gap-2">
+          <span class="text-emerald-600">✓</span>
+          <div><strong>複数評価</strong>：1つの項目に対して複数の評価を追加可能（例：複数の水抜きパイプ）</div>
+        </div>
+        <div class="flex items-start gap-2">
+          <span class="text-emerald-600">✓</span>
+          <div><strong>場所メモ</strong>：各評価に場所メモ（例：北側、2階など）を記録可能</div>
+        </div>
+        <div class="flex items-start gap-2">
+          <span class="text-emerald-600">✓</span>
+          <div><strong>進捗表示</strong>：リアルタイムで完了数・進捗率を表示</div>
+        </div>
+        <div class="flex items-start gap-2">
+          <span class="text-emerald-600">✓</span>
+          <div><strong>データ永続化</strong>：LocalStorageに自動保存（パターン間で共有）</div>
+        </div>
+        <div class="flex items-start gap-2">
+          <span class="text-emerald-600">✓</span>
+          <div><strong>評価レベル</strong>：a（良好）/ b1（軽度）/ b2（中度）/ c（重度）/ −（対象外）</div>
+        </div>
+        <div class="flex items-start gap-2">
+          <span class="text-emerald-600">✓</span>
+          <div><strong>カテゴリジャンプ</strong>：100項目以上でも大項目レベルで素早く移動</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- パターン一覧 -->
+    <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10">
+      <!-- パターン1 -->
+      <a href="mock-mobile-v2-1-jumpnav.html" class="pattern-card block bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div class="bg-gradient-to-r from-emerald-500 to-teal-500 p-4 text-white">
+          <div class="text-3xl mb-2">🎯</div>
+          <h3 class="font-bold text-lg">パターン1: ジャンプナビ</h3>
+        </div>
+        <div class="p-4">
+          <p class="text-slate-600 text-sm mb-3">上部に固定タブで9カテゴリを表示。スクロールに連動して現在位置をハイライト。</p>
+          <div class="space-y-1 text-xs text-slate-500">
+            <div>✓ 常にカテゴリが見える</div>
+            <div>✓ ワンタップでジャンプ可能</div>
+            <div>✓ 全体把握しやすい</div>
+          </div>
+          <div class="mt-4 inline-block bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-xs font-bold">
+            おすすめ度: ⭐⭐⭐⭐⭐
+          </div>
+        </div>
+      </a>
+
+      <!-- パターン2 -->
+      <a href="mock-mobile-v2-2-drawer.html" class="pattern-card block bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div class="bg-gradient-to-r from-slate-600 to-slate-800 p-4 text-white">
+          <div class="text-3xl mb-2">☰</div>
+          <h3 class="font-bold text-lg">パターン2: ドロワーナビ</h3>
+        </div>
+        <div class="p-4">
+          <p class="text-slate-600 text-sm mb-3">左からスライドするサイドメニュー。カテゴリ一覧と進捗を確認可能。</p>
+          <div class="space-y-1 text-xs text-slate-500">
+            <div>✓ 画面を広く使える</div>
+            <div>✓ 必要な時だけ表示</div>
+            <div>✓ リセット機能付き</div>
+          </div>
+          <div class="mt-4 inline-block bg-slate-100 text-slate-700 px-3 py-1 rounded-full text-xs font-bold">
+            おすすめ度: ⭐⭐⭐⭐
+          </div>
+        </div>
+      </a>
+
+      <!-- パターン3 -->
+      <a href="mock-mobile-v2-3-floating.html" class="pattern-card block bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div class="bg-gradient-to-r from-blue-500 to-indigo-500 p-4 text-white">
+          <div class="text-3xl mb-2">🚀</div>
+          <h3 class="font-bold text-lg">パターン3: フローティングナビ</h3>
+        </div>
+        <div class="p-4">
+          <p class="text-slate-600 text-sm mb-3">右下のフローティングボタンからポップアップでナビ。クイック評価パネル付き。</p>
+          <div class="space-y-1 text-xs text-slate-500">
+            <div>✓ 連続入力に最適</div>
+            <div>✓ 親指で操作しやすい</div>
+            <div>✓ 進捗バー表示</div>
+          </div>
+          <div class="mt-4 inline-block bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold">
+            おすすめ度: ⭐⭐⭐⭐⭐
+          </div>
+        </div>
+      </a>
+
+      <!-- パターン4 -->
+      <a href="mock-mobile-v2-4-accordion.html" class="pattern-card block bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div class="bg-gradient-to-r from-purple-500 to-pink-500 p-4 text-white">
+          <div class="text-3xl mb-2">📂</div>
+          <h3 class="font-bold text-lg">パターン4: アコーディオン</h3>
+        </div>
+        <div class="p-4">
+          <p class="text-slate-600 text-sm mb-3">カテゴリごとに折りたたみ。一括開閉・未完了のみ表示が可能。</p>
+          <div class="space-y-1 text-xs text-slate-500">
+            <div>✓ コンパクトな一覧表示</div>
+            <div>✓ 全体把握しやすい</div>
+            <div>✓ 円形進捗ゲージ</div>
+          </div>
+          <div class="mt-4 inline-block bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-xs font-bold">
+            おすすめ度: ⭐⭐⭐⭐
+          </div>
+        </div>
+      </a>
+
+      <!-- パターン5 -->
+      <a href="mock-mobile-v2-5-twopane.html" class="pattern-card block bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div class="bg-gradient-to-r from-orange-500 to-amber-500 p-4 text-white">
+          <div class="text-3xl mb-2">📱</div>
+          <h3 class="font-bold text-lg">パターン5: 2ペイン</h3>
+        </div>
+        <div class="p-4">
+          <p class="text-slate-600 text-sm mb-3">左：カテゴリ一覧 / 右：項目詳細。iPadの横向きに最適化。</p>
+          <div class="space-y-1 text-xs text-slate-500">
+            <div>✓ 大画面で効率的</div>
+            <div>✓ カテゴリ切替が簡単</div>
+            <div>✓ スマホでも使用可</div>
+          </div>
+          <div class="mt-4 inline-block bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-xs font-bold">
+            おすすめ度: ⭐⭐⭐⭐ (iPad向け)
+          </div>
+        </div>
+      </a>
+
+      <!-- データリセット -->
+      <div class="pattern-card bg-slate-50 rounded-2xl shadow-sm overflow-hidden border-2 border-dashed border-slate-300 flex flex-col items-center justify-center p-8 text-center">
+        <div class="text-3xl mb-3">🗑️</div>
+        <h3 class="font-bold text-slate-600 mb-2">データリセット</h3>
+        <p class="text-slate-500 text-sm mb-4">入力したテストデータを<br>すべてクリアします</p>
+        <button onclick="resetAllData()" class="bg-red-100 text-red-600 px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-200 transition">
+          リセット実行
+        </button>
+      </div>
+    </div>
+
+    <!-- 方位設定UIモック -->
+    <div class="mb-10">
+      <h2 class="text-2xl font-bold text-slate-800 mb-4 flex items-center gap-2">
+        <span class="text-3xl">🧭</span> 方位設定UIモック（5パターン）
+      </h2>
+      <p class="text-slate-600 mb-6">スマートフォンでの操作性を重視した方位設定UIの提案です。</p>
+      
+      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <!-- 方位パターン1 -->
+        <a href="mock-orientation-1-bottomsheet.html" class="pattern-card block bg-white rounded-xl shadow-sm overflow-hidden">
+          <div class="bg-gradient-to-r from-slate-700 to-slate-900 p-3 text-white">
+            <div class="text-2xl mb-1">📱</div>
+            <h3 class="font-bold">パターン1: ボトムシート型</h3>
+          </div>
+          <div class="p-3 text-sm">
+            <p class="text-slate-600 mb-2">図面を最大化表示し、下部シートで操作。タブで回転/移動/サイズを切り替え。</p>
+            <div class="text-xs text-slate-500">✓ 図面表示エリア最大 ✓ 直感的なタブ切替</div>
+          </div>
+        </a>
+
+        <!-- 方位パターン2 -->
+        <a href="mock-orientation-2-dial.html" class="pattern-card block bg-white rounded-xl shadow-sm overflow-hidden">
+          <div class="bg-gradient-to-r from-emerald-600 to-teal-600 p-3 text-white">
+            <div class="text-2xl mb-1">🎛️</div>
+            <h3 class="font-bold">パターン2: 円形ダイヤル型</h3>
+          </div>
+          <div class="p-3 text-sm">
+            <p class="text-slate-600 mb-2">下部に大きな円形ダイヤルを配置。ドラッグ操作で直感的に角度調整。</p>
+            <div class="text-xs text-slate-500">✓ ダイヤル操作が直感的 ✓ 細かい角度調整可能</div>
+          </div>
+        </a>
+
+        <!-- 方位パターン3 -->
+        <a href="mock-orientation-3-gesture.html" class="pattern-card block bg-white rounded-xl shadow-sm overflow-hidden">
+          <div class="bg-gradient-to-r from-purple-600 to-indigo-600 p-3 text-white">
+            <div class="text-2xl mb-1">👆</div>
+            <h3 class="font-bold">パターン3: ジェスチャー特化型</h3>
+          </div>
+          <div class="p-3 text-sm">
+            <p class="text-slate-600 mb-2">UI最小化。1本指で回転、2本指で移動、ピンチでサイズ変更。</p>
+            <div class="text-xs text-slate-500">✓ 画面全体を使用 ✓ ジェスチャーで全操作</div>
+          </div>
+        </a>
+
+        <!-- 方位パターン4 -->
+        <a href="mock-orientation-4-slider.html" class="pattern-card block bg-white rounded-xl shadow-sm overflow-hidden">
+          <div class="bg-gradient-to-r from-blue-500 to-cyan-500 p-3 text-white">
+            <div class="text-2xl mb-1">🎚️</div>
+            <h3 class="font-bold">パターン4: スライダー集約型</h3>
+          </div>
+          <div class="p-3 text-sm">
+            <p class="text-slate-600 mb-2">角度・X位置・Y位置・サイズを全てスライダーで調整。明確なコントロール。</p>
+            <div class="text-xs text-slate-500">✓ 操作が明確 ✓ 数値での確認が容易</div>
+          </div>
+        </a>
+
+        <!-- 方位パターン5 -->
+        <a href="mock-orientation-5-floating.html" class="pattern-card block bg-white rounded-xl shadow-sm overflow-hidden">
+          <div class="bg-gradient-to-r from-orange-500 to-red-500 p-3 text-white">
+            <div class="text-2xl mb-1">🔘</div>
+            <h3 class="font-bold">パターン5: フローティング型</h3>
+          </div>
+          <div class="p-3 text-sm">
+            <p class="text-slate-600 mb-2">図面全画面表示。四隅にフローティングボタン配置。8方位プリセット付き。</p>
+            <div class="text-xs text-slate-500">✓ 図面が見やすい ✓ 直接ドラッグ操作</div>
+          </div>
+        </a>
+
+        <!-- 方位設定推奨 -->
+        <div class="bg-amber-50 rounded-xl p-4 border-2 border-amber-200">
+          <div class="text-2xl mb-2">💡</div>
+          <h3 class="font-bold text-amber-800 mb-2">推奨パターン</h3>
+          <div class="text-sm text-amber-700 space-y-1">
+            <div><strong>スマホ：</strong>パターン1 or 5</div>
+            <div><strong>iPad：</strong>パターン3（ジェスチャー）</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 推奨パターン -->
+    <div class="bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl p-6 text-white text-center">
+      <h2 class="text-xl font-bold mb-2">🏆 推奨パターン</h2>
+      <p class="opacity-90 mb-4">現場での使いやすさを考慮した推奨</p>
+      <div class="grid md:grid-cols-2 gap-4 max-w-2xl mx-auto">
+        <div class="bg-white/20 rounded-xl p-4 backdrop-blur">
+          <div class="text-2xl mb-2">📱 スマートフォン</div>
+          <div class="font-bold">パターン1 or パターン3</div>
+          <div class="text-sm opacity-90 mt-1">片手操作でジャンプ可能</div>
+        </div>
+        <div class="bg-white/20 rounded-xl p-4 backdrop-blur">
+          <div class="text-2xl mb-2">📲 iPad横向き</div>
+          <div class="font-bold">パターン5（2ペイン）</div>
+          <div class="text-sm opacity-90 mt-1">大画面を活かした効率的入力</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- フッター -->
+    <div class="text-center mt-8 text-slate-500 text-sm">
+      <p>© 2025 検NET株式会社 - 現地チェックシートアプリ開発</p>
+    </div>
+  </div>
+
+  <script>
+    function resetAllData() {
+      if (confirm('すべてのテストデータを削除しますか？\nこの操作は取り消せません。')) {
+        localStorage.removeItem('kennet_inspection_v2');
+        alert('データをリセットしました');
+        location.reload();
+      }
+    }
+  </script>
+</body>
+</html>
