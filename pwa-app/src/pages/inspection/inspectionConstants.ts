@@ -58,15 +58,27 @@ export const EVAL_BADGE_COLORS: Record<string, string> = {
 
 /**
  * 調査実施/不可の切り替えが不要なカテゴリIDリスト
- * @description cat1: 敷地・地盤、cat7: 違法性 は常に調査実施
+ * @description cat1: 敷地・地盤、cat6: 鉄筋、cat7: シュミット、cat8: 遵法性 は常に調査実施
  */
-export const CATEGORIES_WITHOUT_SURVEY_TOGGLE = ['cat1', 'cat6', 'cat7'];
+export const CATEGORIES_WITHOUT_SURVEY_TOGGLE = ['cat1', 'cat2', 'cat3', 'cat6', 'cat7', 'cat8'];
+
+/**
+ * グループ単位で調査実施/不可の切り替えが必要なグループIDリスト
+ * @description cat2/cat3はカテゴリ単位ではなくグループ単位でトグルを管理する
+ */
+export const GROUPS_WITH_SURVEY_TOGGLE = [
+  'group_yukashita',  // 床下点検口
+  'group_koyaura',    // 小屋裏・天井点検口
+  'group_kiso',       // 基礎
+  'group_gaiheki',    // 外壁
+  'group_kyoyobu',    // 共用部廊下等
+] as const;
 
 /**
  * 項目単位で調査実施/不可の切り替えが必要な項目IDリスト
  * @description item95: 鉄筋探査、item96: シュミットハンマー
  */
-export const ITEMS_WITH_SURVEY_TOGGLE = ['item95', 'item96'];
+export const ITEMS_WITH_SURVEY_TOGGLE: string[] = ['item95', 'item96'];
 
 /**
  * メンテナンス入力項目の定義

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { loadData, saveData } from '../storage/indexedDB';
+import { loadData, saveData, savePropertyInspectionData } from '../storage/indexedDB';
 import { generateId } from '../utils/helpers';
 import type { DefectInfo, Marker, Inspection } from '../types';
+import type { PropertyInspectionData } from '../types/inspectionData';
 
 interface DefectInputState {
   inspectionId?: string;
@@ -15,9 +16,9 @@ interface DefectInputState {
   inspectionItemName?: string;
   evaluationId?: string;
   evaluationType?: string;
-  isSimilar?: boolean;
   positionX?: number;
   positionY?: number;
+  pendingInspectionData?: PropertyInspectionData;
 }
 
 const DefectInputPage: React.FC = () => {
@@ -31,8 +32,8 @@ const DefectInputPage: React.FC = () => {
     returnPath,
     inspectionItemId,
     inspectionItemName,
+    evaluationId,
     evaluationType,
-    isSimilar,
     positionX,
     positionY,
   } = state;
@@ -66,8 +67,18 @@ const DefectInputPage: React.FC = () => {
     loadPropertyId();
   }, [blueprintId, propertyId]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+
+    // 必須項目バリデーション
+    if (!location_.trim() || !component.trim() || !deterioration.trim()) {
+      alert('★の必須項目を入力してください');
+      return;
+    }
+    if (evaluationType !== 'b2' && !repairMethod.trim()) {
+      alert('補修・改修の範囲・方法を入力してください');
+      return;
+    }
 
     const data = await loadData();
     let finalInspectionId = inspectionId;
@@ -113,8 +124,8 @@ const DefectInputPage: React.FC = () => {
       imageData,
       // 新フロー用の追加情報
       inspectionItemId,
+      evaluationId,
       evaluationType,
-      isSimilar: isSimilar || undefined,
       positionX,
       positionY,
       blueprintId,
@@ -130,6 +141,11 @@ const DefectInputPage: React.FC = () => {
     };
 
     await saveData(updatedData);
+
+    // チェックシートの評価データも保存（B2/C撮影フローからの場合）
+    if (state.pendingInspectionData) {
+      await savePropertyInspectionData(state.pendingInspectionData);
+    }
 
     // 戻り先を決定
     if (returnPath) {
@@ -147,6 +163,14 @@ const DefectInputPage: React.FC = () => {
         inspectionId,
         blueprintId,
         returnPath: '/defect/input',
+        propertyId: state.propertyId,
+        inspectionItemId,
+        inspectionItemName,
+        evaluationId,
+        evaluationType,
+        positionX,
+        positionY,
+        pendingInspectionData: state.pendingInspectionData,
       },
     });
   };
@@ -181,7 +205,7 @@ const DefectInputPage: React.FC = () => {
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-4 py-4">
+      <main className="max-w-2xl mx-auto px-4 py-4 pb-24">
         <div className="bg-white rounded-xl shadow-md p-4">
           {/* 写真（小さく表示） + 撮影し直すボタン */}
           <div className="flex items-start gap-3 mb-4">
@@ -246,7 +270,7 @@ const DefectInputPage: React.FC = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                補修・改修の範囲・方法 <span className="text-red-500">*</span>
+                補修・改修の範囲・方法 {evaluationType !== 'b2' && <span className="text-red-500">*</span>}
               </label>
               <textarea
                 value={repairMethod}
@@ -254,28 +278,32 @@ const DefectInputPage: React.FC = () => {
                 className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500"
                 rows={4}
                 placeholder="例: 該当箇所の下地処理後、再塗装を実施"
-                required
+                required={evaluationType !== 'b2'}
               />
             </div>
 
-            <div className="flex gap-3 pt-2">
-              <button
-                type="submit"
-                className="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-semibold hover:bg-emerald-700 transition-all active:scale-95 shadow-lg"
-              >
-                保存
-              </button>
-              <button
-                type="button"
-                onClick={handleCancel}
-                className="flex-1 border-2 border-slate-600 text-slate-600 py-3 rounded-xl font-semibold hover:bg-slate-700 hover:text-white hover:border-slate-700 transition-all active:scale-95"
-              >
-                キャンセル
-              </button>
-            </div>
           </form>
         </div>
       </main>
+
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t shadow-lg z-30">
+        <div className="flex gap-3 max-w-2xl mx-auto">
+          <button
+            type="button"
+            onClick={handleCancel}
+            className="flex-1 border-2 border-slate-600 text-slate-600 py-3 rounded-xl font-semibold hover:bg-slate-700 hover:text-white hover:border-slate-700 transition-all active:scale-95"
+          >
+            キャンセル
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSubmit()}
+            className="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-semibold hover:bg-emerald-700 transition-all active:scale-95 shadow-lg"
+          >
+            保存
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

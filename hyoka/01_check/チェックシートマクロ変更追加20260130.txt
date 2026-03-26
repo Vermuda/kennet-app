@@ -1,0 +1,55 @@
+チェックシートモジュール1　756行目
+'' =============================================
+'' フォーム必須入力チェック
+''
+'' 対象シート:
+''   - 机上チェックシート
+''   - 現地調査
+''
+'' 動作:
+''   フォームの必須入力チェックを行い、未入力の項目がある場合は以下動作を行う
+''   - ダイアログ表示「未入力箇所があります、ご確認ください」
+''   - セル背景色を黄色に強調
+''   - 保護解除→保護実行処理追加
+'' =============================================
+Sub ValidateCheck()
+    Dim ws As Worksheet
+    Dim invalidFirstCell As Range
+
+    On Error GoTo Finally   ' ← 保険（超重要）
+
+    '=== シート保護解除 ===
+    Worksheets("机上チェックシート").Unprotect Password:="2025Ken0129ken"
+    Worksheets("現地調査").Unprotect Password:="2025Ken0129ken"
+
+    '=== 既存処理 ===
+    Set ws = Worksheets("机上チェックシート")
+    Call ValidateDesktopChecks(invalidFirstCell)
+
+    Set ws = Worksheets("現地調査")
+    Call ValidateOnsiteBaseChecks(invalidFirstCell)
+
+    Call ValidateOnsiteSpecialPatterns1(invalidFirstCell)
+    Call ValidateOnsiteSpecialPatterns2(invalidFirstCell)
+    Call ValidateOnsiteSpecialPatterns3(invalidFirstCell)
+    Call ValidateOnsiteSpecialPatterns4(invalidFirstCell)
+    Call ValidateOnsiteSpecialPatterns5(invalidFirstCell)
+    Call ValidateOnsiteSpecialPatterns6(invalidFirstCell)
+    Call ValidateOnsiteSpecialPatterns7(invalidFirstCell)
+    Call ValidateOnsiteSpecialPatterns8(invalidFirstCell)
+
+    Call ValidateB2CHighlightedCells(invalidFirstCell)
+
+    If invalidFirstCell Is Nothing Then
+        MsgBox "入力チェックOK"
+    Else
+        MsgBox "未入力箇所があります、ご確認ください"
+        invalidFirstCell.Worksheet.Activate
+        invalidFirstCell.Activate
+    End If
+
+Finally:
+    '=== シート再保護（図形操作を許可）===
+    Worksheets("机上チェックシート").Protect Password:="2025Ken0129ken", DrawingObjects:=False
+    Worksheets("現地調査").Protect Password:="2025Ken0129ken", DrawingObjects:=False
+End Sub

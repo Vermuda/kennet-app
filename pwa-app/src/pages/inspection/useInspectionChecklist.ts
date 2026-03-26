@@ -18,20 +18,20 @@ import { generateId } from '../../utils/helpers';
 import { inspectionMaster, getItemById } from '../../utils/inspectionMaster';
 import { loadData, saveData } from '../../storage/indexedDB';
 import { loadInspectionData, saveInspectionData, generateDummyDefectImage } from './inspectionDataUtils';
-import { DEBUG_MODE, EVAL_PRIORITY, CATEGORIES_WITHOUT_SURVEY_TOGGLE, ITEMS_WITH_SURVEY_TOGGLE } from './inspectionConstants';
+import { DEBUG_MODE, EVAL_PRIORITY, CATEGORIES_WITHOUT_SURVEY_TOGGLE, ITEMS_WITH_SURVEY_TOGGLE, GROUPS_WITH_SURVEY_TOGGLE } from './inspectionConstants';
 import type { Marker, Inspection, DefectInfo, Blueprint } from '../../types';
 import type {
   InspectionEvaluation,
   StandardEvaluation,
   ManagementEvaluation,
   LegalEvaluation,
+  SurveyMethod,
   PropertyInspectionData,
   InspectionCategory,
   InspectionItem,
   CategorySurveyStatus,
   GroupExistenceStatus,
   CategoryMaintenanceStatus,
-  SurveyMethod,
 } from '../../types/inspectionData';
 
 // ─── 戻り値の型定義 ──────────────────────────────────────
@@ -49,16 +49,22 @@ export interface UseInspectionChecklistReturn {
   setLocationMemo: (v: string) => void;
   concernDetail: string;
   setConcernDetail: (v: string) => void;
+  legalDocValue: string;
+  setLegalDocValue: (v: string) => void;
+  legalMeasuredValue: string;
+  setLegalMeasuredValue: (v: string) => void;
   freetextContent: string;
   setFreetextContent: (v: string) => void;
+  remarkText: string;
+  setRemarkText: (v: string) => void;
   selectedSurveyMethods: SurveyMethod[];
-  setSelectedSurveyMethods: React.Dispatch<React.SetStateAction<SurveyMethod[]>>;
+  setSelectedSurveyMethods: (v: SurveyMethod[]) => void;
+  surveyMethodError: boolean;
+  setSurveyMethodError: (v: boolean) => void;
   rebarPitch: string;
   setRebarPitch: (v: string) => void;
   schmidtValues: string[];
   setSchmidtValues: (v: string[]) => void;
-  surveyMethodError: boolean;
-  setSurveyMethodError: (v: boolean) => void;
   isTablet: boolean;
   showToast: string;
   contentRef: React.RefObject<HTMLDivElement | null>;
@@ -75,8 +81,6 @@ export interface UseInspectionChecklistReturn {
   modalItem: ReturnType<typeof getItemById>;
   /** 選択中の評価がb2 or cか */
   isDefectEval: boolean;
-  /** 標準評価で調査方法が未選択 */
-  isStandardMissingSurvey: boolean;
 
   // --- カテゴリ調査状態 ---
   getCategorySurveyStatus: (categoryId: string) => CategorySurveyStatus;
@@ -89,6 +93,12 @@ export interface UseInspectionChecklistReturn {
   updateItemSurveyStatus: (itemId: string, status: CategorySurveyStatus) => void;
   needsItemSurveyToggle: (itemId: string) => boolean;
   isItemDisabledBySurvey: (itemId: string) => boolean;
+
+  // --- グループ単位の調査状態 ---
+  needsGroupSurveyToggle: (groupId: string) => boolean;
+  getGroupSurveyStatus: (groupId: string) => CategorySurveyStatus;
+  updateGroupSurveyStatus: (groupId: string, status: CategorySurveyStatus) => void;
+  isGroupDisabled: (groupId: string) => boolean;
 
   // --- グループ有無 ---
   getGroupExistence: (groupId: string) => GroupExistenceStatus | null;
@@ -116,10 +126,12 @@ export interface UseInspectionChecklistReturn {
   getTotalProgress: () => { done: number; total: number; percent: number; skippedCategories: number };
 
   // --- 評価操作 ---
+  editingEvalIndex: number | null;
   getWorstEvaluation: (itemId: string) => string | null;
   getDisabledEvals: (itemId: string) => Set<string>;
   handleAddEvaluation: (goToDefectCapture?: boolean) => void;
   handleRemoveEvaluation: (itemId: string, evalIndex: number) => void;
+  handleEditEvaluation: (itemId: string, evalIndex: number) => void;
 
   // --- モーダル ---
   openModal: (itemId: string) => void;
@@ -152,15 +164,19 @@ export function useInspectionChecklist(propertyId: string | undefined): UseInspe
   const [selectedEval, setSelectedEval] = useState<string | null>(null);
   const [locationMemo, setLocationMemo] = useState('');
   const [concernDetail, setConcernDetail] = useState('');
+  const [legalDocValue, setLegalDocValue] = useState('');
+  const [legalMeasuredValue, setLegalMeasuredValue] = useState('');
   const [freetextContent, setFreetextContent] = useState('');
+  const [remarkText, setRemarkText] = useState('');
   const [selectedSurveyMethods, setSelectedSurveyMethods] = useState<SurveyMethod[]>([]);
+  const [surveyMethodError, setSurveyMethodError] = useState(false);
   const [rebarPitch, setRebarPitch] = useState('');
   const [schmidtValues, setSchmidtValues] = useState<string[]>(Array(9).fill(''));
-  const [surveyMethodError, setSurveyMethodError] = useState(false);
   const [isTablet, setIsTablet] = useState(window.innerWidth >= 768);
   const [showToast, setShowToast] = useState('');
   const contentRef = useRef<HTMLDivElement>(null);
   const [editingCategoryReason, setEditingCategoryReason] = useState<{ catId: string; reason: string } | null>(null);
+  const [editingEvalIndex, setEditingEvalIndex] = useState<number | null>(null);
   const [isFillingDebug, setIsFillingDebug] = useState(false);
   const [showDebugPanel, setShowDebugPanel] = useState(false);
 
@@ -220,6 +236,42 @@ export function useInspectionChecklist(propertyId: string | undefined): UseInspe
     return !status.conducted;
   }, [getCategorySurveyStatus, needsSurveyToggle]);
 
+  // ─── グループ単位の調査状態 ──────────────────────────────
+
+  /** グループに調査実施/不可の切り替えが必要かどうか */
+  const needsGroupSurveyToggle = useCallback((groupId: string): boolean => {
+    return (GROUPS_WITH_SURVEY_TOGGLE as readonly string[]).includes(groupId);
+  }, []);
+
+  /** グループの調査実施状況を取得（categorySurveyStatusにgroupIdキーで格納） */
+  const getGroupSurveyStatus = useCallback((groupId: string): CategorySurveyStatus => {
+    if (!inspectionData?.categorySurveyStatus?.[groupId]) {
+      return { conducted: true };
+    }
+    return inspectionData.categorySurveyStatus[groupId];
+  }, [inspectionData]);
+
+  /** グループの調査実施状況を更新 */
+  const updateGroupSurveyStatus = useCallback((groupId: string, status: CategorySurveyStatus) => {
+    if (!inspectionData) return;
+    const newData = {
+      ...inspectionData,
+      categorySurveyStatus: {
+        ...inspectionData.categorySurveyStatus,
+        [groupId]: status,
+      },
+    };
+    setInspectionData(newData);
+    saveInspectionData(newData);
+  }, [inspectionData]);
+
+  /** グループが調査実施不可かどうか */
+  const isGroupDisabled = useCallback((groupId: string): boolean => {
+    if (!needsGroupSurveyToggle(groupId)) return false;
+    const status = getGroupSurveyStatus(groupId);
+    return !status.conducted;
+  }, [getGroupSurveyStatus, needsGroupSurveyToggle]);
+
   // ─── 項目単位の調査状態 ──────────────────────────────
 
   /** 項目の調査実施状況を取得 */
@@ -249,11 +301,12 @@ export function useInspectionChecklist(propertyId: string | undefined): UseInspe
     return ITEMS_WITH_SURVEY_TOGGLE.includes(itemId);
   }, []);
 
-  /** 項目が調査実施不可かどうか */
+  /** 項目が調査実施不可/実施不要かどうか */
   const isItemDisabledBySurvey = useCallback((itemId: string): boolean => {
     if (!needsItemSurveyToggle(itemId)) return false;
     const status = getItemSurveyStatus(itemId);
-    return !status.conducted;
+    const surveyState = status.surveyState || (status.conducted ? 'conducted' : 'not_conducted');
+    return surveyState !== 'conducted';
   }, [getItemSurveyStatus, needsItemSurveyToggle]);
 
   // ─── グループ有無 ──────────────────────────────────
@@ -307,7 +360,7 @@ export function useInspectionChecklist(propertyId: string | undefined): UseInspe
   const isItemDisabledByGroupExistence = useCallback((item: InspectionItem): boolean => {
     if (!item.groupId) return false;
     // 基礎・外壁グループは有/無選択を廃止したため除外
-    if (item.groupId === 'group_kiso' || item.groupId === 'group_gaiheki' || item.groupId === 'group_yane' || item.groupId === 'group_okujou') return false;
+    if (item.groupId === 'group_kiso' || item.groupId === 'group_gaiheki') return false;
     const groupExistence = getGroupExistence(item.groupId);
     return groupExistence?.exists === false;
   }, [getGroupExistence]);
@@ -393,12 +446,13 @@ export function useInspectionChecklist(propertyId: string | undefined): UseInspe
       if (isItemDisabledByGroupExistence(item)) return;
       if (isItemDisabledByFinishMaterial(item)) return;
       if (isItemDisabledBySurvey(item.id)) return;
+      if (item.groupId && isGroupDisabled(item.groupId)) return;
       total++;
       const evals = inspectionData.evaluations[item.id];
       if (evals && evals.length > 0) done++;
     });
     return { done, total, skipped: false };
-  }, [inspectionData, isCategoryDisabled, isItemDisabledByGroupExistence, isItemDisabledByFinishMaterial, isItemDisabledBySurvey]);
+  }, [inspectionData, isCategoryDisabled, isItemDisabledByGroupExistence, isItemDisabledByFinishMaterial, isItemDisabledBySurvey, isGroupDisabled]);
 
   /** 全体の進捗を計算 */
   const getTotalProgress = useCallback(() => {
@@ -437,19 +491,12 @@ export function useInspectionChecklist(propertyId: string | undefined): UseInspe
     return worstEval;
   }, [inspectionData]);
 
-  /** 最も重度の評価に基づいて無効化すべき評価のセットを返す */
+  /** 無効化すべき評価のセットを返す */
   const getDisabledEvals = useCallback((itemId: string): Set<string> => {
-    const worst = getWorstEvaluation(itemId);
-    if (!worst) return new Set();
-    const worstPriority = EVAL_PRIORITY[worst] || 0;
-    const disabled = new Set<string>();
-    for (const [evalKey, priority] of Object.entries(EVAL_PRIORITY)) {
-      if (priority < worstPriority) {
-        disabled.add(evalKey);
-      }
-    }
-    return disabled;
-  }, [getWorstEvaluation]);
+    // No7（建物の周囲）はc評価不可
+    if (itemId === 'item7') return new Set(['c']);
+    return new Set();
+  }, []);
 
   // ─── 評価操作 ──────────────────────────────────
 
@@ -467,8 +514,15 @@ export function useInspectionChecklist(propertyId: string | undefined): UseInspe
 
     if (itemInfo.item.evalType !== 'freetext' && !selectedEval) return;
 
-    if (itemInfo.item.evalType === 'standard' && selectedSurveyMethods.length === 0) {
+    // 標準評価で「対象無」以外の場合、調査方法は必須
+    if (itemInfo.item.evalType === 'standard' && selectedEval !== 'na' && selectedSurveyMethods.length === 0) {
       setSurveyMethodError(true);
+      return;
+    }
+
+    // legal型で「懸念有」の場合、懸念内容は必須
+    if (itemInfo.item.evalType === 'legal' && selectedEval === 'concern' && !concernDetail.trim()) {
+      toast('懸念有の場合、懸念内容を入力してください');
       return;
     }
 
@@ -483,26 +537,30 @@ export function useInspectionChecklist(propertyId: string | undefined): UseInspe
       timestamp: Date.now(),
     };
 
-    // 類似事象フラグ
-    if (selectedEval === 'b2' || selectedEval === 'c') {
-      const existingEvals = inspectionData.evaluations[modalItemId] || [];
-      const hasExistingDefect = existingEvals.some(e => e.eval === 'b2' || e.eval === 'c');
-      if (hasExistingDefect) {
-        newEval.isSimilar = true;
-      }
-    }
-
-    // 調査方法
-    if (itemInfo.item.evalType === 'standard' && selectedSurveyMethods.length > 0) {
+    // 調査方法（標準評価で「対象無」以外の場合）
+    if (itemInfo.item.evalType === 'standard' && selectedEval !== 'na' && selectedSurveyMethods.length > 0) {
       newEval.surveyMethods = selectedSurveyMethods;
     }
 
     // 特殊入力
-    if (itemInfo.item.evalType === 'legal' && selectedEval === 'concern') {
-      newEval.concernDetail = concernDetail;
+    if (itemInfo.item.evalType === 'legal') {
+      if (concernDetail) {
+        newEval.concernDetail = concernDetail;
+      }
+      if (legalDocValue) {
+        newEval.legalDocValue = parseFloat(legalDocValue);
+      }
+      if (legalMeasuredValue) {
+        newEval.legalMeasuredValue = parseFloat(legalMeasuredValue);
+      }
     }
     if (itemInfo.item.evalType === 'freetext') {
       newEval.freetextContent = freetextContent || '';
+      // item101: 資料値・実測値
+      if (modalItemId === 'item101') {
+        if (legalDocValue) newEval.legalDocValue = parseFloat(legalDocValue);
+        if (legalMeasuredValue) newEval.legalMeasuredValue = parseFloat(legalMeasuredValue);
+      }
     }
     if (itemInfo.item.evalType === 'rebar' && rebarPitch) {
       newEval.rebarPitch = parseFloat(rebarPitch);
@@ -516,20 +574,27 @@ export function useInspectionChecklist(propertyId: string | undefined): UseInspe
       }
     }
 
-    // シュミットハンマーの場合は既存の評価を更新（編集モード）
+    // 評価リストの更新
     let updatedEvaluations;
-    if (itemInfo.item.evalType === 'schmidt') {
-      const existingEvals = inspectionData.evaluations[modalItemId];
-      if (existingEvals && existingEvals.length > 0) {
+    const existingEvals = inspectionData.evaluations[modalItemId] || [];
+
+    if (editingEvalIndex !== null && existingEvals[editingEvalIndex]) {
+      // 編集モード: 既存評価を上書き（IDは保持）
+      updatedEvaluations = [...existingEvals];
+      updatedEvaluations[editingEvalIndex] = { ...newEval, id: existingEvals[editingEvalIndex].id };
+    } else if (itemInfo.item.evalType === 'schmidt' || itemInfo.item.evalType === 'select') {
+      // シュミットハンマー・選択式: 常に上書き（1つのみ）
+      if (existingEvals.length > 0) {
         updatedEvaluations = [{ ...existingEvals[0], ...newEval, id: existingEvals[0].id }];
       } else {
         updatedEvaluations = [newEval];
       }
     } else {
-      updatedEvaluations = [...(inspectionData.evaluations[modalItemId] || []), newEval];
+      // 新規追加
+      updatedEvaluations = [...existingEvals, newEval];
     }
 
-    const newData = {
+    let newData: PropertyInspectionData = {
       ...inspectionData,
       evaluations: {
         ...inspectionData.evaluations,
@@ -537,33 +602,71 @@ export function useInspectionChecklist(propertyId: string | undefined): UseInspe
       },
     };
 
-    setInspectionData(newData);
-    saveInspectionData(newData);
-    closeModal();
+    // 備考がある場合、遵法性の備考セクションに自動追記
+    if (remarkText.trim()) {
+      const catInfo = inspectionMaster.find(c => c.items.some(i => i.id === modalItemId));
+      const catName = catInfo?.shortName || catInfo?.name || '';
+      const entry = `【${catName}】-【${itemInfo.item.name}】\n${remarkText.trim()}`;
+      const currentRemarks = (newData.options?.['remarks']?.['備考'] as string) || '';
+      const updatedRemarks = currentRemarks ? `${currentRemarks}\n\n${entry}` : entry;
+      newData = {
+        ...newData,
+        options: {
+          ...newData.options,
+          remarks: { ...(newData.options?.['remarks'] || {}), '備考': updatedRemarks },
+        },
+      };
+    }
 
-    // b2/cの場合、図面位置選択画面へ遷移
-    if (goToDefectCapture && (selectedEval === 'b2' || selectedEval === 'c')) {
+    const isEditing = editingEvalIndex !== null;
+
+    // b2/c評価の場合は編集・新規問わず撮影フローへ遷移
+    const isDefect = selectedEval === 'b2' || selectedEval === 'c' || selectedEval === 'B' || selectedEval === 'C';
+    // 編集モード時のevaluationIdは上書き保持されたもの
+    const evalId = isEditing && existingEvals[editingEvalIndex!]
+      ? existingEvals[editingEvalIndex!].id
+      : newEval.id;
+
+    if (isDefect && goToDefectCapture) {
+      // 撮影フローへ遷移する場合: IndexedDBには保存せず、state更新のみ
+      // 不具合情報保存時にまとめてIndexedDBに保存する
+      setInspectionData(newData);
+      closeModal();
+
+      const returnWithScroll = `/properties/${propertyId}/inspection-checklist?scrollTo=${modalItemId}`;
       navigate(`/properties/${propertyId}/select-position`, {
         state: {
           propertyId,
           inspectionItemId: modalItemId,
           inspectionItemName: itemInfo.item.name,
-          evaluationId: newEval.id,
+          evaluationId: evalId,
           evaluationType: selectedEval,
-          isSimilar: newEval.isSimilar || false,
-          returnPath: `/properties/${propertyId}/inspection-checklist`,
+          returnPath: returnWithScroll,
+          pendingInspectionData: newData,
         },
       });
-      toast(`${selectedEval === 'b2' ? '経年変化' : '不具合'}を追加 → 位置選択へ`);
+      const evalLabel = selectedEval === 'b2' ? '経年変化' : selectedEval === 'c' ? '不具合' : selectedEval === 'B' ? '管理B' : '管理C';
+      toast(`${isEditing ? '更新' : evalLabel + 'を追加'} → 位置選択へ`);
     } else {
-      toast('評価を追加しました');
+      // 撮影フローでない場合: 即座にIndexedDBに保存
+      setInspectionData(newData);
+      saveInspectionData(newData);
+      closeModal();
+
+      if (isEditing) {
+        toast('評価を更新しました');
+      } else {
+        toast('評価を追加しました');
+      }
     }
   };
 
-  /** 評価を削除する */
-  const handleRemoveEvaluation = (itemId: string, evalIndex: number) => {
+  /** 評価を削除する（不具合・検査・マーカーも連動削除） */
+  const handleRemoveEvaluation = async (itemId: string, evalIndex: number) => {
     if (!inspectionData) return;
-    const newEvals = [...(inspectionData.evaluations[itemId] || [])];
+    const currentEvals = inspectionData.evaluations[itemId] || [];
+    const deletedEval = currentEvals[evalIndex];
+    const newEvals = [...currentEvals];
     newEvals.splice(evalIndex, 1);
 
     const newData = {
@@ -577,6 +680,31 @@ export function useInspectionChecklist(propertyId: string | undefined): UseInspe
 
     setInspectionData(newData);
     saveInspectionData(newData);
+
+    // 評価IDに紐づく不具合・検査・マーカーを連動削除
+    if (deletedEval?.id) {
+      try {
+        const appData = await loadData();
+        const matchingDefects = appData.defects.filter(d => d.evaluationId === deletedEval.id);
+        if (matchingDefects.length > 0) {
+          const matchingInspectionIds = new Set(matchingDefects.map(d => d.inspectionId));
+          const matchingMarkerIds = new Set(
+            appData.inspections
+              .filter(ins => matchingInspectionIds.has(ins.id))
+              .map(ins => ins.markerId)
+          );
+          await saveData({
+            ...appData,
+            defects: appData.defects.filter(d => d.evaluationId !== deletedEval.id),
+            inspections: appData.inspections.filter(ins => !matchingInspectionIds.has(ins.id)),
+            markers: appData.markers.filter(m => !matchingMarkerIds.has(m.id)),
+          });
+        }
+      } catch (err) {
+        console.error('[handleRemoveEvaluation] 連動削除エラー:', err);
+      }
+    }
+
     toast('削除しました');
   };
 
@@ -588,10 +716,14 @@ export function useInspectionChecklist(propertyId: string | undefined): UseInspe
     setSelectedEval(null);
     setLocationMemo('');
     setConcernDetail('');
+    setLegalDocValue('');
+    setLegalMeasuredValue('');
     setFreetextContent('');
+    setRemarkText('');
     setSelectedSurveyMethods([]);
     setSurveyMethodError(false);
     setRebarPitch('');
+    setEditingEvalIndex(null);
 
     // シュミットハンマーの場合は既存の値を読み込む
     const itemInfo = getItemById(itemId);
@@ -611,11 +743,43 @@ export function useInspectionChecklist(propertyId: string | undefined): UseInspe
     }
   };
 
+  /** 既存の評価を編集モードでモーダルを開く */
+  const handleEditEvaluation = (itemId: string, evalIndex: number) => {
+    if (!inspectionData) return;
+    const evals = inspectionData.evaluations[itemId];
+    if (!evals || !evals[evalIndex]) return;
+    const existingEval = evals[evalIndex];
+    const itemInfo = getItemById(itemId);
+    if (!itemInfo) return;
+
+    setModalItemId(itemId);
+    setEditingEvalIndex(evalIndex);
+    setSelectedEval(existingEval.eval === 'freetext' ? null : existingEval.eval);
+    setLocationMemo(existingEval.memo || '');
+    setRemarkText('');
+    setSelectedSurveyMethods(existingEval.surveyMethods || []);
+    setSurveyMethodError(false);
+    setConcernDetail(existingEval.concernDetail || '');
+    setLegalDocValue(existingEval.legalDocValue !== undefined ? String(existingEval.legalDocValue) : '');
+    setLegalMeasuredValue(existingEval.legalMeasuredValue !== undefined ? String(existingEval.legalMeasuredValue) : '');
+    setFreetextContent(existingEval.freetextContent || '');
+    setRebarPitch(existingEval.rebarPitch !== undefined ? String(existingEval.rebarPitch) : '');
+
+    if (itemInfo.item.evalType === 'schmidt' && existingEval.schmidtValues) {
+      const values = Array(9).fill('').map((_, i) =>
+        existingEval.schmidtValues?.[i] !== undefined ? String(existingEval.schmidtValues[i]) : ''
+      );
+      setSchmidtValues(values);
+    } else {
+      setSchmidtValues(Array(9).fill(''));
+    }
+  };
+
   /** モーダルを閉じる */
   const closeModal = () => {
     setModalItemId(null);
     setSelectedEval(null);
-    setSurveyMethodError(false);
+    setEditingEvalIndex(null);
   };
 
   // ─── ナビゲーション ──────────────────────────────
@@ -767,7 +931,6 @@ export function useInspectionChecklist(propertyId: string | undefined): UseInspe
           if (isItemDisabledByGroupExistence(item)) continue;
 
           let evalValue: string;
-          const surveyMethods: SurveyMethod[] = ['visual'];
 
           switch (item.evalType) {
             case 'standard': {
@@ -793,6 +956,9 @@ export function useInspectionChecklist(propertyId: string | undefined): UseInspe
             case 'schmidt':
               evalValue = 'a';
               break;
+            case 'select':
+              evalValue = item.options?.[0]?.choices[Math.floor(Math.random() * (item.options[0].choices.length))] || 'a';
+              break;
             default:
               evalValue = 'a';
           }
@@ -804,9 +970,6 @@ export function useInspectionChecklist(propertyId: string | undefined): UseInspe
             timestamp: Date.now(),
           };
 
-          if (item.evalType === 'standard') {
-            newEval.surveyMethods = surveyMethods;
-          }
           if (item.evalType === 'freetext') {
             newEval.freetextContent = Math.random() < 0.8 ? '' : '[DEBUG] 懸念事項あり';
           }
@@ -935,8 +1098,7 @@ export function useInspectionChecklist(propertyId: string | undefined): UseInspe
     ? inspectionMaster.find(c => c.id === selectedCategoryId)
     : undefined;
   const modalItem = modalItemId ? getItemById(modalItemId) : null;
-  const isDefectEval = selectedEval === 'b2' || selectedEval === 'c';
-  const isStandardMissingSurvey = modalItem?.item.evalType === 'standard' && selectedSurveyMethods.length === 0;
+  const isDefectEval = selectedEval === 'b2' || selectedEval === 'c' || selectedEval === 'B' || selectedEval === 'C';
 
   // ─── Return ──────────────────────────────────
 
@@ -951,16 +1113,22 @@ export function useInspectionChecklist(propertyId: string | undefined): UseInspe
     setLocationMemo,
     concernDetail,
     setConcernDetail,
+    legalDocValue,
+    setLegalDocValue,
+    legalMeasuredValue,
+    setLegalMeasuredValue,
     freetextContent,
     setFreetextContent,
+    remarkText,
+    setRemarkText,
     selectedSurveyMethods,
     setSelectedSurveyMethods,
+    surveyMethodError,
+    setSurveyMethodError,
     rebarPitch,
     setRebarPitch,
     schmidtValues,
     setSchmidtValues,
-    surveyMethodError,
-    setSurveyMethodError,
     isTablet,
     showToast,
     contentRef,
@@ -973,7 +1141,6 @@ export function useInspectionChecklist(propertyId: string | undefined): UseInspe
     currentCategory,
     modalItem,
     isDefectEval,
-    isStandardMissingSurvey,
 
     getCategorySurveyStatus,
     updateCategorySurveyStatus,
@@ -984,6 +1151,11 @@ export function useInspectionChecklist(propertyId: string | undefined): UseInspe
     updateItemSurveyStatus,
     needsItemSurveyToggle,
     isItemDisabledBySurvey,
+
+    needsGroupSurveyToggle,
+    getGroupSurveyStatus,
+    updateGroupSurveyStatus,
+    isGroupDisabled,
 
     getGroupExistence,
     updateGroupExistence,
@@ -1004,10 +1176,12 @@ export function useInspectionChecklist(propertyId: string | undefined): UseInspe
     getCategoryProgress,
     getTotalProgress,
 
+    editingEvalIndex,
     getWorstEvaluation,
     getDisabledEvals,
     handleAddEvaluation,
     handleRemoveEvaluation,
+    handleEditEvaluation,
 
     openModal,
     closeModal,

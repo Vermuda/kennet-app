@@ -161,7 +161,7 @@ export const loadData = async (): Promise<AppState> => {
       referenceImages: referenceImages.length,
     });
 
-    // 物件ごとの定形写真を取得して結合
+    // 物件ごとの定型写真を取得して結合
     const propertiesWithPhotos = await Promise.all(
       properties.map(async (property) => {
         const photos = await db.standardPhotos
@@ -261,7 +261,7 @@ export const saveData = async (data: AppState): Promise<void> => {
 
       // データを一括保存
       if (data.properties.length > 0) {
-        // 物件と定形写真を分離して保存
+        // 物件と定型写真を分離して保存
         const propertiesWithoutPhotos = data.properties.map(({ standardPhotos, ...rest }) => rest);
         const allStandardPhotos = data.properties.flatMap((p) => p.standardPhotos || []);
 

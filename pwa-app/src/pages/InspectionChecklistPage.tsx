@@ -7,7 +7,8 @@
  * このファイルはレイアウト（モバイル/タブレット）の組み立てのみを担当する。
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useParams } from 'react-router-dom';
 import { inspectionMaster } from '../utils/inspectionMaster';
 import {
@@ -28,8 +29,10 @@ import {
   YaneGroupInputs,
   OkujouGroupInputs,
   RemarksSection,
+  MAINTENANCE_ITEMS,
 } from './inspection';
 import type { InspectionCategory } from '../types/inspectionData';
+import ReferencePhotoButton from '../components/ReferencePhotoButton';
 
 /**
  * カテゴリ内の項目をグループ化してレンダリングする
@@ -51,6 +54,7 @@ const renderCategoryItems = (
     // グループヘッダーを先に表示（グループの最初の項目の時のみ）
     if (item.groupId && item.groupLabel && !renderedGroups.has(item.groupId)) {
       renderedGroups.add(item.groupId);
+      const hasGroupToggle = hook.needsGroupSurveyToggle(item.groupId);
       result.push(
         <GroupHeader
           key={`group-header-${item.groupId}`}
@@ -60,29 +64,44 @@ const renderCategoryItems = (
           onUpdateGroupExistence={hook.updateGroupExistence}
           getItemOption={hook.getItemOption}
           updateItemOption={hook.updateItemOption}
+          needsSurveyToggle={hasGroupToggle}
+          surveyStatus={hasGroupToggle ? hook.getGroupSurveyStatus(item.groupId) : undefined}
+          onToggleSurveyConducted={hasGroupToggle ? (groupId, conducted) => {
+            hook.updateGroupSurveyStatus(groupId, { conducted });
+          } : undefined}
+          onEditSurveyReason={hasGroupToggle ? (groupId, reason) => {
+            hook.setEditingCategoryReason({ catId: `group:${groupId}`, reason });
+          } : undefined}
+          toast={hook.toast}
         />
       );
 
-      // 屋根グループ: 屋根仕様・撮影棒確認入力セクション
+      // 屋根グループ: 屋根仕様・撮影棒確認入力セクション（「無」の場合は非表示）
       if (item.groupId === 'group_yane') {
-        result.push(
-          <YaneGroupInputs
-            key="yane-group-inputs"
-            getItemOption={hook.getItemOption}
-            updateItemOption={hook.updateItemOption}
-          />
-        );
+        const yaneExists = hook.getGroupExistence('group_yane');
+        if (yaneExists?.exists !== false) {
+          result.push(
+            <YaneGroupInputs
+              key="yane-group-inputs"
+              getItemOption={hook.getItemOption}
+              updateItemOption={hook.updateItemOption}
+            />
+          );
+        }
       }
 
-      // 屋上グループ: 防水工法・確認方法入力セクション
+      // 屋上グループ: 防水工法・確認方法入力セクション（「無」の場合は非表示）
       if (item.groupId === 'group_okujou') {
-        result.push(
-          <OkujouGroupInputs
-            key="okujou-group-inputs"
-            getItemOption={hook.getItemOption}
-            updateItemOption={hook.updateItemOption}
-          />
-        );
+        const okujouExists = hook.getGroupExistence('group_okujou');
+        if (okujouExists?.exists !== false) {
+          result.push(
+            <OkujouGroupInputs
+              key="okujou-group-inputs"
+              getItemOption={hook.getItemOption}
+              updateItemOption={hook.updateItemOption}
+            />
+          );
+        }
       }
 
       // 外壁グループ: 構造種別・外壁詳細入力セクション
@@ -138,20 +157,20 @@ const renderCategoryItems = (
       }
     }
 
-    // 項目単位の調査実施/不可トグル（item95: 鉄筋探査、item96: シュミット）
+    // 項目単位の調査実施/実施不要/不可トグル（item95: 鉄筋探査、item96: シュミット）
     if (ITEMS_WITH_SURVEY_TOGGLE.includes(item.id)) {
       const itemSurveyStatus = hook.getItemSurveyStatus(item.id);
-      const isItemNotConducted = !itemSurveyStatus.conducted;
+      const surveyState = itemSurveyStatus.surveyState || (itemSurveyStatus.conducted ? 'conducted' : 'not_conducted');
       result.push(
         <div key={`item-survey-${item.id}`} className="px-3 py-2 bg-slate-50 border-b">
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs font-bold text-slate-600">{item.name}</span>
             <div className="flex items-center gap-1">
               <button
-                onClick={() => hook.updateItemSurveyStatus(item.id, { conducted: true })}
+                onClick={() => hook.updateItemSurveyStatus(item.id, { conducted: true, surveyState: 'conducted' })}
                 disabled={isCategoryDisabledFlag}
                 className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-                  !isItemNotConducted
+                  surveyState === 'conducted'
                     ? 'bg-emerald-600 text-white'
                     : 'bg-slate-200 text-slate-500'
                 } disabled:opacity-50`}
@@ -159,12 +178,23 @@ const renderCategoryItems = (
                 実施
               </button>
               <button
+                onClick={() => hook.updateItemSurveyStatus(item.id, { conducted: false, surveyState: 'not_required' })}
+                disabled={isCategoryDisabledFlag}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                  surveyState === 'not_required'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-slate-200 text-slate-500'
+                } disabled:opacity-50`}
+              >
+                実施不要
+              </button>
+              <button
                 onClick={() => {
                   hook.setEditingCategoryReason({ catId: `item:${item.id}`, reason: itemSurveyStatus.notConductedReason || '' });
                 }}
                 disabled={isCategoryDisabledFlag}
                 className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-                  isItemNotConducted
+                  surveyState === 'not_conducted'
                     ? 'bg-red-500 text-white'
                     : 'bg-slate-200 text-slate-500'
                 } disabled:opacity-50`}
@@ -173,7 +203,7 @@ const renderCategoryItems = (
               </button>
             </div>
           </div>
-          {isItemNotConducted && itemSurveyStatus.notConductedReason && (
+          {surveyState === 'not_conducted' && itemSurveyStatus.notConductedReason && (
             <div className="mt-1 text-xs text-red-500">
               理由: {itemSurveyStatus.notConductedReason}
             </div>
@@ -183,6 +213,7 @@ const renderCategoryItems = (
     }
 
     const isItemSurveyDisabled = hook.isItemDisabledBySurvey(item.id);
+    const isGroupDisabledFlag = item.groupId ? hook.isGroupDisabled(item.groupId) : false;
 
     result.push(
       <InspectionItemRow
@@ -192,10 +223,10 @@ const renderCategoryItems = (
         isDisabledByGroup={hook.isItemDisabledByGroupExistence(item)}
         isDisabledByFinish={hook.isItemDisabledByFinishMaterial(item)}
         isDisabledByOption={hook.isItemDisabledByItemOption(item)}
-        isCategoryDisabled={isCategoryDisabledFlag || isItemSurveyDisabled}
+        isCategoryDisabled={isCategoryDisabledFlag || isItemSurveyDisabled || isGroupDisabledFlag}
         isLarge={isLarge}
         onOpenModal={hook.openModal}
-        onRemoveEvaluation={hook.handleRemoveEvaluation}
+        onEditEvaluation={hook.handleEditEvaluation}
       />
     );
   });
@@ -205,7 +236,58 @@ const renderCategoryItems = (
 
 const InspectionChecklistPage: React.FC = () => {
   const { propertyId } = useParams<{ propertyId: string }>();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const hook = useInspectionChecklist(propertyId);
+
+  // b2/c評価後のスクロール復帰（URLクエリパラメータ ?scrollTo=itemXX を使用）
+  const scrollTargetRef = React.useRef<string | null>(null);
+
+  // Phase 1: URLからスクロール対象を取得し、クエリパラメータを除去
+  useEffect(() => {
+    const scrollTo = searchParams.get('scrollTo');
+    if (scrollTo && !scrollTargetRef.current) {
+      scrollTargetRef.current = scrollTo;
+      // URLからクエリパラメータを除去（履歴を置換）
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
+  // Phase 2: データロード完了後にスクロール実行
+  useEffect(() => {
+    const targetItemId = scrollTargetRef.current;
+    if (!targetItemId || !hook.inspectionData) return;
+
+
+    // タブレットモードの場合、該当項目のカテゴリを自動選択
+    if (hook.isTablet) {
+      const targetCat = inspectionMaster.find(c => c.items.some(i => i.id === targetItemId));
+      if (targetCat) {
+        hook.setSelectedCategoryId(targetCat.id);
+      }
+    }
+  }, [hook.inspectionData]);
+
+  // Phase 3: DOM描画後にスクロール実行（selectedCategoryId変化にも対応）
+  useEffect(() => {
+    const targetItemId = scrollTargetRef.current;
+    if (!targetItemId || !hook.inspectionData) return;
+
+    const scrollToItem = (retries = 0) => {
+      const el = document.getElementById(`inspection-item-${targetItemId}`);
+      if (el) {
+        scrollTargetRef.current = null; // 完了後にクリア
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('ring-2', 'ring-emerald-400');
+        setTimeout(() => el.classList.remove('ring-2', 'ring-emerald-400'), 2000);
+      } else if (retries < 30) {
+        setTimeout(() => scrollToItem(retries + 1), 200);
+      } else {
+        scrollTargetRef.current = null;
+      }
+    };
+    setTimeout(() => scrollToItem(), 100);
+  }, [hook.inspectionData, hook.selectedCategoryId]);
 
   // ローディング
   if (!hook.inspectionData) {
@@ -228,6 +310,16 @@ const InspectionChecklistPage: React.FC = () => {
           </button>
           <span className="font-bold text-sm whitespace-nowrap">検査チェックシート</span>
           <span className="text-emerald-400 text-xs font-bold">{progress.done}/{progress.total}</span>
+          <button
+            onClick={() => navigate('/settings')}
+            className="p-1.5 border border-white text-white rounded hover:bg-white hover:text-slate-900 transition-all"
+            title="設定"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </button>
         </div>
 
         {/* ジャンプナビ */}
@@ -248,6 +340,28 @@ const InspectionChecklistPage: React.FC = () => {
               </button>
             );
           })}
+          {/* メンテナンスへのジャンプタブ */}
+          {(() => {
+            const maintDone = MAINTENANCE_ITEMS.filter((m) => {
+              const s = hook.getMaintenanceStatus(m.id);
+              return s.need !== null;
+            }).length;
+            const maintTotal = MAINTENANCE_ITEMS.length;
+            return (
+              <button
+                onClick={() => {
+                  const el = document.getElementById('maintenance-section');
+                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="px-3 py-2 text-xs whitespace-nowrap flex-shrink-0 border-b-2 border-transparent hover:bg-gray-600"
+              >
+                <div className="font-bold text-white">メンテナンス</div>
+                <div className={`text-[10px] ${maintDone > 0 ? 'text-emerald-400' : 'text-gray-400'}`}>
+                  {maintDone}/{maintTotal}
+                </div>
+              </button>
+            );
+          })()}
         </div>
       </header>
 
@@ -291,6 +405,7 @@ const InspectionChecklistPage: React.FC = () => {
                 )}
                 {renderCategoryItems(cat, hook, false, isSkipped)}
               </div>
+
             </div>
           );
         })}
@@ -315,9 +430,26 @@ const InspectionChecklistPage: React.FC = () => {
 
       {/* フッター */}
       <div className="fixed bottom-0 left-0 right-0 p-3 bg-white border-t shadow-lg z-30">
-        <button onClick={hook.handleBack} className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold">
-          💾 保存して戻る
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => navigate(`/camera/reference`, {
+              state: {
+                propertyId,
+                returnPath: `/properties/${propertyId}/inspection-checklist`,
+              },
+            })}
+            className="px-4 py-3 bg-blue-600 text-white rounded-xl font-bold flex items-center gap-1.5 hover:bg-blue-700 transition active:scale-95"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            <span className="text-sm">通常撮影(バックアップ)</span>
+          </button>
+          <button onClick={hook.handleBack} className="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-bold">
+            保存して戻る
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -498,6 +630,7 @@ const InspectionChecklistPage: React.FC = () => {
                     )}
                     {renderCategoryItems(hook.currentCategory, hook, true, isSkipped)}
                   </div>
+
                 </>
               );
             })()
@@ -536,21 +669,28 @@ const InspectionChecklistPage: React.FC = () => {
           setSelectedEval={hook.setSelectedEval}
           concernDetail={hook.concernDetail}
           setConcernDetail={hook.setConcernDetail}
+          legalDocValue={hook.legalDocValue}
+          setLegalDocValue={hook.setLegalDocValue}
+          legalMeasuredValue={hook.legalMeasuredValue}
+          setLegalMeasuredValue={hook.setLegalMeasuredValue}
           freetextContent={hook.freetextContent}
           setFreetextContent={hook.setFreetextContent}
+          remarkText={hook.remarkText}
+          setRemarkText={hook.setRemarkText}
           selectedSurveyMethods={hook.selectedSurveyMethods}
           setSelectedSurveyMethods={hook.setSelectedSurveyMethods}
+          surveyMethodError={hook.surveyMethodError}
+          setSurveyMethodError={hook.setSurveyMethodError}
           rebarPitch={hook.rebarPitch}
           setRebarPitch={hook.setRebarPitch}
           schmidtValues={hook.schmidtValues}
           setSchmidtValues={hook.setSchmidtValues}
-          surveyMethodError={hook.surveyMethodError}
-          setSurveyMethodError={hook.setSurveyMethodError}
           isDefectEval={hook.isDefectEval}
-          isStandardMissingSurvey={hook.isStandardMissingSurvey}
+          editingEvalIndex={hook.editingEvalIndex}
           getDisabledEvals={hook.getDisabledEvals}
           getWorstEvaluation={hook.getWorstEvaluation}
           onAddEvaluation={hook.handleAddEvaluation}
+          onRemoveEvaluation={hook.handleRemoveEvaluation}
           onClose={hook.closeModal}
         />
       )}
@@ -559,13 +699,20 @@ const InspectionChecklistPage: React.FC = () => {
       {hook.editingCategoryReason && (() => {
         const editingId = hook.editingCategoryReason!.catId;
         const isItemLevel = editingId.startsWith('item:');
-        const actualId = isItemLevel ? editingId.replace('item:', '') : editingId;
+        const isGroupLevel = editingId.startsWith('group:');
+        const actualId = isItemLevel ? editingId.replace('item:', '') : isGroupLevel ? editingId.replace('group:', '') : editingId;
 
-        const cat = isItemLevel ? null : inspectionMaster.find(c => c.id === actualId);
+        const cat = (!isItemLevel && !isGroupLevel) ? inspectionMaster.find(c => c.id === actualId) : null;
         const itemInfo = isItemLevel ? inspectionMaster.flatMap(c => c.items).find(i => i.id === actualId) : null;
-        const displayName = isItemLevel ? (itemInfo?.name || actualId) : (cat?.name || '');
+        // グループレベルの場合、グループラベルを検索
+        const groupItem = isGroupLevel ? inspectionMaster.flatMap(c => c.items).find(i => i.groupId === actualId && i.groupLabel) : null;
+        const displayName = isItemLevel
+          ? (itemInfo?.name || actualId)
+          : isGroupLevel
+            ? (groupItem?.groupLabel || actualId)
+            : (cat?.name || '');
 
-        if (!isItemLevel && !cat) return null;
+        if (!isItemLevel && !isGroupLevel && !cat) return null;
 
         return (
           <ReasonModal
@@ -581,6 +728,13 @@ const InspectionChecklistPage: React.FC = () => {
               }
               if (isItemLevel) {
                 hook.updateItemSurveyStatus(actualId, {
+                  conducted: false,
+                  surveyState: 'not_conducted',
+                  notConductedReason: hook.editingCategoryReason!.reason.trim(),
+                });
+                hook.toast(`${displayName}: 調査実施不可に設定`);
+              } else if (isGroupLevel) {
+                hook.updateGroupSurveyStatus(actualId, {
                   conducted: false,
                   notConductedReason: hook.editingCategoryReason!.reason.trim(),
                 });
@@ -605,6 +759,8 @@ const InspectionChecklistPage: React.FC = () => {
           {hook.showToast}
         </div>
       )}
+
+      {hook.isTablet && propertyId && <ReferencePhotoButton propertyId={propertyId} />}
 
       <style>{`
         .scrollbar-hide::-webkit-scrollbar { display: none; }

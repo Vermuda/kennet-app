@@ -1,0 +1,180 @@
+\\MainController 2613行目　少数切り上げ処理追加
+
+' 耐用年数判定結果文言設定処理
+Private Sub ExecuteUsefulLifeResultTextSetting(destWb As Workbook)
+    If destWb Is Nothing Then
+        Call WriteLog("エラー: ワークブックが設定されていません（ExecuteUsefulLifeResultTextSetting）")
+        Exit Sub
+    End If
+    
+    On Error GoTo ErrorHandler
+    
+    Call WriteLog("=== 耐用年数判定結果文言設定処理開始 ===")
+    
+    ' 基準耐用年数判定シートから判定コードを取得
+    Dim usefulLifeWs As Worksheet
+    Set usefulLifeWs = GetWorksheetSafely(destWb, "基準耐用年数判定")
+    
+    If usefulLifeWs Is Nothing Then
+        Call WriteLog("警告: 基準耐用年数判定シートが見つかりません")
+        Exit Sub
+    End If
+    
+    ' 判定コードと各種値を取得
+    Dim judgmentCode As String
+    Dim valueA As String  ' J3の値（切り上げ）
+    Dim valueB As String  ' H3の値（切り上げ）
+    Dim valueC As String  ' K3の値（切り上げ）
+
+    judgmentCode = CStr(usefulLifeWs.Range("I3").value)
+
+    ' valueA（J3）を切り上げ
+    Dim tempA As Double
+    tempA = CDbl(usefulLifeWs.Range("J3").value)
+    valueA = CStr(Application.WorksheetFunction.RoundUp(tempA, 0))
+
+    ' valueB（H3）を切り上げ
+    Dim tempB As Double
+    tempB = CDbl(usefulLifeWs.Range("H3").value)
+    valueB = CStr(Application.WorksheetFunction.RoundUp(tempB, 0))
+
+    ' valueC（K3）を切り上げ
+    Dim tempC As Double
+    tempC = CDbl(usefulLifeWs.Range("K3").value)
+    valueC = CStr(Application.WorksheetFunction.RoundUp(tempC, 0))
+    
+    Call WriteLog("判定コード: " & judgmentCode)
+    Call WriteLog("値A: " & valueA & ", 値B: " & valueB & ", 値C: " & valueC)
+    
+    ' 判定コードに基づいて文言を設定
+    Select Case judgmentCode
+        Case "G1"
+            Call SetG1ResultText(destWb, valueA, valueB)
+        Case "G2"
+            Call SetG2ResultText(destWb, valueA, valueB, valueC)
+        Case "APG1"
+            Call SetAPG1ResultText(destWb, valueA, valueB)
+        Case "APG2"
+            Call SetAPG2ResultText(destWb, valueA, valueB, valueC)
+        Case Else
+            Call WriteLog("警告: 未知の判定コード - " & judgmentCode)
+    End Select
+    
+    Call WriteLog("=== 耐用年数判定結果文言設定処理完了 ===")
+    Exit Sub
+    
+ErrorHandler:
+    Call WriteLog("エラー: 耐用年数判定結果文言設定処理中にエラーが発生しました - " & Err.Description)
+End Sub
+
+---------------------------------------------------------------------------------------------------------------
+\\2712行目、2800行目D18とD25セル計算式分け
+
+' G2の場合の文言設定
+Private Sub SetG2ResultText(wb As Workbook, valueA As String, valueB As String, valueC As String)
+    On Error Resume Next
+    
+    Dim ws As Worksheet
+    Set ws = GetWorksheetSafely(wb, "検証結果03-1")
+    
+    If ws Is Nothing Then
+        Call WriteLog("警告: 検証結果03-1シートが見つかりません")
+        Exit Sub
+    End If
+    
+    ' 残存耐用年数を計算D18
+    Dim remainingYears01 As Long
+    If IsNumeric(valueA) And IsNumeric(valueB) Then
+        remainingYears01 = CLng(valueA) - CLng(valueB)
+    End If
+    
+    
+    ' 残存耐用年数を計算D25
+    Dim remainingYears02 As Long
+    If IsNumeric(valueC) And IsNumeric(valueB) Then
+        remainingYears02 = CLng(valueC) - CLng(valueB)
+    End If
+    
+    ' D17セル
+    Dim text1 As String
+    text1 = "当該建築物の期待耐用年数は" & valueA & "年の結果となり、現在築年数" & valueB & "年を経過している"
+    ws.Range("D17").value = text1
+    
+    ' D18セル
+    Dim text2 As String
+    text2 = "ことから残存の耐用年数は、" & CStr(remainingYears01) & "年として支障ないものと判断します。"
+    ws.Range("D18").value = text2
+    
+    ' D17セル
+    'Dim text1 As String
+    'text1 = "当該建築物の期待耐用年数は" & valueA & "年の結果となります。" & vbCrLf & _
+            "著しい劣化事象が見受けられた為、補修・改修等を実施し、定期的な維持管理を" & vbCrLf & _
+            "前提にした評価日時点の期待耐用年数は、以下を期待できるものと判断します。"
+    'ws.Range("D17").value = text1
+    
+    ' D24セル
+    Dim text3 As String
+    text3 = "当該建築物の期待耐用年数は" & valueC & "年の結果となり、現在築年数" & valueB & "年を経過している"
+    ws.Range("D24").value = text3
+    
+    ' D25セル
+    Dim text4 As String
+    text4 = "ことから残存の耐用年数は" & CStr(remainingYears02) & "年程度の延伸の評価が期待されるものと思われます。"
+    ws.Range("D25").value = text4
+    
+    Call WriteLog("G2文言設定完了: D17, D21, D22")
+    On Error GoTo 0
+End Sub
+
+
+MainController 2204行　D292セルの判定を追加。係数はALC板吹付仕上と同じ
+
+    ' 外壁の種類2 → H73
+    resultValue = ""
+    If sourceWs.Range("D285").value = "■" Then
+        resultValue = "PCパネル"
+    ElseIf sourceWs.Range("D286").value = "■" Then
+        resultValue = "PCパネル"
+    ElseIf sourceWs.Range("D287").value = "■" Then
+        resultValue = "PCパネル"
+    ElseIf sourceWs.Range("D288").value = "■" Then
+        resultValue = "その他湿式工法"
+    ElseIf sourceWs.Range("D290").value = "■" Then
+        resultValue = "乾式工法"
+    ElseIf sourceWs.Range("D292").value = "■" Then
+        resultValue = "ALC板タイル貼仕上"
+    End If
+    If resultValue <> "" Then
+        destWs.Range("H77").value = resultValue
+        copyCount = copyCount + 1
+    End If
+    
+    
+    
+MainController 992行追加
+    ' 2-01. 現地調査チェックシートの「評価c類似」→ 評価書の「評価c類似」
+    Dim sourceSheetSimiC As Worksheet
+    Dim destSheetSimiC As Worksheet
+    Set sourceSheetSimiC = GetWorksheetSafely(sourceWb, "評価c類似")
+    Set destSheetSimiC = GetWorksheetSafely(destWb, "評価c類似")
+    
+    If sourceSheetSimiC Is Nothing Then
+        Call WriteLog("警告: ソースシート「評価c類似」が見つかりません")
+    ElseIf destSheetSimiC Is Nothing Then
+        Call WriteLog("警告: 転記先シート「評価c類似」が見つかりません")
+    Else
+        Call CopyEntireSheet(sourceSheetSimiC, destSheetSimiC, copyCount)
+    End If
+    
+    
+    
+
+MainController 371行変更
+    Call CopyToObject(sourceWs, "CO6", destWs, "title-text", copyCount)
+
+
+
+
+
+
+

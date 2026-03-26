@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { loadData, updateData, getPropertyInspectionData } from '../storage/indexedDB';
+import { loadData, updateData, getPropertyInspectionData, db } from '../storage/indexedDB';
 import { generateId } from '../utils/helpers';
 import { inspectionMaster } from '../utils/inspectionMaster';
+import { exportAsZip } from '../utils/zipExport';
 import ReferencePhotoButton from '../components/ReferencePhotoButton';
 import type { Property, Floor } from '../types';
 import type { InspectionCategory, InspectionItem } from '../types/inspectionData';
-import { MAINTENANCE_ITEMS } from './inspection/inspectionConstants';
+import { MAINTENANCE_ITEMS, CATEGORIES_WITHOUT_SURVEY_TOGGLE, GROUPS_WITH_SURVEY_TOGGLE, ITEMS_WITH_SURVEY_TOGGLE } from './inspection/inspectionConstants';
 
 const PropertyDetailPage: React.FC = () => {
   const { propertyId } = useParams<{ propertyId: string }>();
@@ -18,6 +19,10 @@ const PropertyDetailPage: React.FC = () => {
   const [missingItems, setMissingItems] = useState<{ item: InspectionItem; category: InspectionCategory }[]>([]);
   const [missingMaintenanceLabels, setMissingMaintenanceLabels] = useState<string[]>([]);
   const [isCheckingCompletion, setIsCheckingCompletion] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editAddress, setEditAddress] = useState('');
+  const [editInspectionDate, setEditInspectionDate] = useState('');
+  const [editWeather, setEditWeather] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -29,12 +34,6 @@ const PropertyDetailPage: React.FC = () => {
       return;
     }
     setProperty(prop);
-
-    // 初回アクセス時、検査日が未設定なら日付・天候入力ページへ自動遷移
-    if (!prop.inspectionDate) {
-      navigate(`/properties/${propertyId}/date-weather`);
-      return;
-    }
 
     const propertyFloors = data.floors
       .filter((f) => f.propertyId === propertyId)
@@ -79,69 +78,50 @@ const PropertyDetailPage: React.FC = () => {
   };
 
   const handleExportData = async () => {
-    const data = await loadData();
+    if (!property || !propertyId) return;
 
-    // 方位情報を含む図面データを取得
-    const blueprintsWithOrientation = data.blueprints
-      .filter((b) => floors.some((f) => f.id === b.floorId))
-      .map((b) => ({
-        id: b.id,
-        floorId: b.floorId,
-        imageData: b.imageData,
-        orientation: b.orientation,
-        orientationIconX: b.orientationIconX,
-        orientationIconY: b.orientationIconY,
-        orientationIconScale: b.orientationIconScale,
-        createdAt: b.createdAt,
-      }));
+    try {
+      const data = await loadData();
 
-    // 検査チェックシートのデータを取得（IndexedDBから）
-    const inspectionChecklist = await getPropertyInspectionData(propertyId!);
+      // 方位情報を含む図面データを取得
+      const blueprintsForExport = data.blueprints
+        .filter((b) => floors.some((f) => f.id === b.floorId));
 
-    // 検査チェックシートの進捗を計算
-    let checklistProgress = { total: 0, completed: 0 };
-    if (inspectionChecklist?.evaluations) {
-      const evalCount = Object.keys(inspectionChecklist.evaluations).length;
-      checklistProgress = { total: 101, completed: evalCount }; // 101項目
-    }
+      // 検査チェックシートのデータを取得
+      const inspectionChecklist = await getPropertyInspectionData(propertyId);
 
-    const exportData = {
-      exportInfo: {
-        exportedAt: new Date().toISOString(),
-        version: '2.0',
-        description: '現地チェックシートアプリ - データエクスポート',
-      },
-      property,
-      floors,
-      blueprints: blueprintsWithOrientation,
-      markers: data.markers.filter((m) =>
+      // 定型写真を取得
+      const standardPhotos = await db.standardPhotos
+        .where('propertyId')
+        .equals(propertyId)
+        .toArray();
+
+      // マーカーをフィルタ
+      const filteredMarkers = data.markers.filter((m) =>
         data.blueprints.some((b) => b.id === m.blueprintId && floors.some((f) => f.id === b.floorId))
-      ),
-      // 検査チェックシート（101項目の評価データ）
-      inspectionChecklist,
-      // 旧形式の検査データ（互換性のため）
-      inspections: data.inspections,
-      defects: data.defects,
-      referenceImages: data.referenceImages.filter((r) => r.propertyId === propertyId),
-    };
+      );
 
-    console.log('[Export] データエクスポート:', {
-      blueprintCount: blueprintsWithOrientation.length,
-      hasInspectionChecklist: !!inspectionChecklist,
-      checklistProgress,
-    });
+      // ZIPエクスポート実行
+      await exportAsZip({
+        property,
+        floors,
+        blueprints: blueprintsForExport,
+        markers: filteredMarkers,
+        inspectionChecklist: inspectionChecklist ?? null,
+        inspections: data.inspections,
+        defects: data.defects,
+        standardPhotos,
+      });
 
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
-      type: 'application/json',
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${property?.name}_${new Date().toISOString().split('T')[0]}_data.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+      const evalCount = inspectionChecklist?.evaluations
+        ? Object.keys(inspectionChecklist.evaluations).length
+        : 0;
 
-    alert(`データをエクスポートしました\n\n図面: ${blueprintsWithOrientation.length}件\n検査チェックシート: ${checklistProgress.completed}/${checklistProgress.total}項目`);
+      alert(`データをエクスポートしました（ZIP）\n\n図面: ${blueprintsForExport.length}件\n通常写真: ${standardPhotos.filter(p => p.imageData).length}件\n事象写真: ${data.defects.filter(d => d.imageData).length}件\n検査チェックシート: ${evalCount}/101項目`);
+    } catch (error) {
+      console.error('[Export] エラー:', error);
+      alert('エクスポートに失敗しました: ' + (error instanceof Error ? error.message : String(error)));
+    }
   };
 
   // 検査終了バリデーション: 未入力の検査項目をチェック
@@ -158,9 +138,12 @@ const PropertyDetailPage: React.FC = () => {
 
       for (const category of inspectionMaster) {
         // カテゴリが「調査実施不可」の場合はスキップ
-        const catStatus = inspectionData?.categorySurveyStatus?.[category.id];
-        if (catStatus && !catStatus.conducted) {
-          continue;
+        // CATEGORIES_WITHOUT_SURVEY_TOGGLEに含まれないカテゴリのみトグル対象
+        if (!CATEGORIES_WITHOUT_SURVEY_TOGGLE.includes(category.id)) {
+          const catStatus = inspectionData?.categorySurveyStatus?.[category.id];
+          if (catStatus && !catStatus.conducted) {
+            continue;
+          }
         }
 
         for (const item of category.items) {
@@ -172,10 +155,31 @@ const PropertyDetailPage: React.FC = () => {
             }
           }
 
+          // グループ単位の調査実施不可の場合はスキップ（基礎、外壁、床下、小屋裏等）
+          if (item.groupId && GROUPS_WITH_SURVEY_TOGGLE.includes(item.groupId as typeof GROUPS_WITH_SURVEY_TOGGLE[number])) {
+            const groupSurvey = inspectionData?.categorySurveyStatus?.[item.groupId];
+            if (groupSurvey && !groupSurvey.conducted) {
+              continue;
+            }
+          }
+
           // 項目単位の調査実施不可の場合はスキップ（item95: 鉄筋探査、item96: シュミット）
-          const itemSurvey = inspectionData?.itemSurveyStatus?.[item.id];
-          if (itemSurvey && !itemSurvey.conducted) {
-            continue;
+          if (ITEMS_WITH_SURVEY_TOGGLE.includes(item.id)) {
+            const itemSurvey = inspectionData?.itemSurveyStatus?.[item.id];
+            if (itemSurvey) {
+              const surveyState = itemSurvey.surveyState || (itemSurvey.conducted ? 'conducted' : 'not_conducted');
+              if (surveyState !== 'conducted') {
+                continue;
+              }
+            }
+          }
+
+          // 仕上げ材の未選択による無効化チェック
+          if (item.finishMaterialKey && item.groupId) {
+            const selectedMaterials = inspectionData?.finishMaterials?.[item.groupId] || [];
+            if (selectedMaterials.length > 0 && !selectedMaterials.includes(item.finishMaterialKey)) {
+              continue;
+            }
           }
 
           // 評価データがあるかチェック
@@ -219,6 +223,38 @@ const PropertyDetailPage: React.FC = () => {
     }
   }, [propertyId]);
 
+  // 物件情報一括保存 + 検査開始時刻記録
+  const handleSavePropertyInfo = useCallback(async () => {
+    if (!propertyId || !property) return;
+    const now = new Date().toISOString();
+    const data = await loadData();
+    const updatedProperties = data.properties.map((p) => {
+      if (p.id !== propertyId) return p;
+      return {
+        ...p,
+        address: editAddress,
+        inspectionDate: editInspectionDate,
+        weather: editWeather,
+        // 初回保存時のみ検査開始時刻を記録
+        inspectionStartTime: p.inspectionStartTime || now,
+        updatedAt: now,
+      };
+    });
+    await updateData('properties', updatedProperties);
+    const updated = updatedProperties.find((p) => p.id === propertyId)!;
+    setProperty(updated);
+    setShowEditModal(false);
+  }, [propertyId, property, editAddress, editInspectionDate, editWeather]);
+
+  // 編集モーダルを開く
+  const openEditModal = useCallback(() => {
+    if (!property) return;
+    setEditAddress(property.address || '');
+    setEditInspectionDate(property.inspectionDate || new Date().toISOString().split('T')[0]);
+    setEditWeather(property.weather || '');
+    setShowEditModal(true);
+  }, [property]);
+
   // 未入力項目をタップして検査チェックシートへ遷移
   const handleNavigateToMissingItem = useCallback((categoryId: string) => {
     setShowMissingItemsModal(false);
@@ -260,10 +296,17 @@ const PropertyDetailPage: React.FC = () => {
       </header>
 
       <main className="px-4 py-4 space-y-4">
-        {/* 物件情報カード - コンパクト2カラム */}
+        {/* 物件情報カード */}
         <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-4 shadow-lg">
           <div className="flex justify-between items-center mb-3">
-            <h2 className="text-emerald-400 font-bold text-sm">物件情報</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-emerald-400 font-bold text-sm">物件情報</h2>
+              {property.inspectionStartTime && (
+                <span className="text-[10px] text-slate-400 bg-slate-700 px-2 py-0.5 rounded-full">
+                  開始 {new Date(property.inspectionStartTime).toLocaleDateString('ja-JP')} {new Date(property.inspectionStartTime).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              )}
+            </div>
             <button
               onClick={handleExportData}
               className="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1 transition-colors"
@@ -275,28 +318,44 @@ const PropertyDetailPage: React.FC = () => {
             </button>
           </div>
           <div className="grid grid-cols-2 gap-2 text-xs">
-            <div className="bg-slate-700/50 rounded-lg p-2.5">
-              <div className="text-emerald-300/80 mb-0.5">住所</div>
-              <div className="text-white truncate">{property.address}</div>
-            </div>
-            <div className="bg-slate-700/50 rounded-lg p-2.5">
-              <div className="text-emerald-300/80 mb-0.5">検査日</div>
-              <div className="text-white">
+            {/* 住所 - タップで編集モーダル */}
+            <button
+              onClick={openEditModal}
+              className="bg-emerald-600 hover:bg-emerald-500 rounded-lg p-2.5 text-left transition-colors shadow-md"
+            >
+              <div className="text-white/90 mb-0.5 font-medium">住所</div>
+              <div className="text-white font-bold truncate">{property.address || '未設定'}</div>
+            </button>
+
+            {/* 検査日 - タップで編集モーダル */}
+            <button
+              onClick={openEditModal}
+              className="bg-emerald-600 hover:bg-emerald-500 rounded-lg p-2.5 text-left transition-colors shadow-md"
+            >
+              <div className="text-white/90 mb-0.5 font-medium">検査日</div>
+              <div className="text-white font-bold">
                 {property.inspectionDate
                   ? new Date(property.inspectionDate).toLocaleDateString('ja-JP')
                   : '未設定'}
               </div>
-            </div>
-            <div className="bg-slate-700/50 rounded-lg p-2.5">
-              <div className="text-emerald-300/80 mb-0.5">天候</div>
-              <div className="text-white">{property.weather || '未設定'}</div>
-            </div>
+            </button>
+
+            {/* 天候 - タップで編集モーダル */}
+            <button
+              onClick={openEditModal}
+              className="bg-emerald-600 hover:bg-emerald-500 rounded-lg p-2.5 text-left transition-colors shadow-md"
+            >
+              <div className="text-white/90 mb-0.5 font-medium">天候</div>
+              <div className="text-white font-bold">{property.weather || '未設定'}</div>
+            </button>
+
+            {/* 定型写真 */}
             <button
               onClick={() => navigate(`/properties/${propertyId}/standard-photos`)}
               className="bg-emerald-600 hover:bg-emerald-500 rounded-lg p-2.5 text-left transition-colors shadow-md"
             >
               <div className="text-white/90 mb-0.5 flex items-center gap-1 font-medium">
-                定形写真
+                定型写真
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
@@ -377,12 +436,6 @@ const PropertyDetailPage: React.FC = () => {
               </div>
               <div className="flex gap-2">
                 <button
-                  type="submit"
-                  className="flex-1 bg-emerald-600 text-white py-2.5 rounded-xl font-medium"
-                >
-                  追加
-                </button>
-                <button
                   type="button"
                   onClick={() => {
                     setShowAddModal(false);
@@ -392,8 +445,72 @@ const PropertyDetailPage: React.FC = () => {
                 >
                   キャンセル
                 </button>
+                <button
+                  type="submit"
+                  className="flex-1 bg-emerald-600 text-white py-2.5 rounded-xl font-medium"
+                >
+                  追加
+                </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 物件情報編集モーダル */}
+      {showEditModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm">
+            <h2 className="text-lg font-bold text-slate-800 mb-4">物件情報の編集</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">検査日</label>
+                <input
+                  type="date"
+                  value={editInspectionDate}
+                  onChange={(e) => setEditInspectionDate(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">住所</label>
+                <input
+                  type="text"
+                  value={editAddress}
+                  onChange={(e) => setEditAddress(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  placeholder="住所を入力"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">天候</label>
+                <select
+                  value={editWeather}
+                  onChange={(e) => setEditWeather(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                >
+                  <option value="">選択してください</option>
+                  <option value="晴">晴</option>
+                  <option value="曇">曇</option>
+                  <option value="雨">雨</option>
+                  <option value="雪">雪</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-6">
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="flex-1 border border-slate-300 text-slate-600 py-2.5 rounded-xl font-medium"
+              >
+                戻る
+              </button>
+              <button
+                onClick={handleSavePropertyInfo}
+                className="flex-1 bg-emerald-600 text-white py-2.5 rounded-xl font-medium"
+              >
+                保存
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -505,7 +622,6 @@ const PropertyDetailPage: React.FC = () => {
               </h2>
               <p className="text-sm text-slate-500 mt-1">
                 {missingItems.length + missingMaintenanceLabels.length}件の項目が未入力です。
-                {missingItems.length > 0 && 'タップすると該当カテゴリへ移動します。'}
               </p>
             </div>
 

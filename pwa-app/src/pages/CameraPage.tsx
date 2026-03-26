@@ -5,8 +5,11 @@ import { logStorageUsage, getStorageWarningLevel, getSetting, loadData, updateDa
 import { generateId } from '../utils/helpers';
 import type { ReferenceImage } from '../types';
 
-const TARGET_ASPECT = 16 / 9;
+const LANDSCAPE_ASPECT = 16 / 9;
+const PORTRAIT_ASPECT = 9 / 16;
 const TIMER_SETTING_KEY = 'cameraTimerSeconds';
+
+type OrientationMode = 'portrait' | 'landscape';
 
 const CameraPage: React.FC = () => {
   const { mode } = useParams<{ mode: 'defect' | 'reference' | 'standard' }>();
@@ -21,6 +24,39 @@ const CameraPage: React.FC = () => {
   const [timerSeconds, setTimerSeconds] = useState<number | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // 撮影モード（縦/横）
+  const [orientationMode, setOrientationMode] = useState<OrientationMode>('landscape');
+  const targetAspect = orientationMode === 'landscape' ? LANDSCAPE_ASPECT : PORTRAIT_ASPECT;
+
+  // デバイスの実際の向き（横持ちかどうか）
+  const [isDeviceLandscape, setIsDeviceLandscape] = useState(window.innerWidth > window.innerHeight);
+
+  // ズーム・フォーカス関連
+  const [zoomValue, setZoomValue] = useState(1);
+  const zoomRef = useRef(1);
+  const zoomRangeRef = useRef<{ min: number; max: number } | null>(null);
+  const [focusPoint, setFocusPoint] = useState<{ x: number; y: number } | null>(null);
+  const pinchRef = useRef({ isPinching: false, initialDistance: 0, startZoom: 1 });
+
+  // デバイスの実際の向き追跡（撮影モードは変更しない）
+  useEffect(() => {
+    const handleOrientation = () => {
+      const isLandscape = window.innerWidth > window.innerHeight;
+      setIsDeviceLandscape(isLandscape);
+    };
+    handleOrientation(); // 初回チェック
+    window.addEventListener('resize', handleOrientation);
+    if (screen.orientation) {
+      screen.orientation.addEventListener('change', handleOrientation);
+    }
+    return () => {
+      window.removeEventListener('resize', handleOrientation);
+      if (screen.orientation) {
+        screen.orientation.removeEventListener('change', handleOrientation);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     console.log('[Camera] mount. mode =', mode);
@@ -90,6 +126,21 @@ const CameraPage: React.FC = () => {
           });
         } catch (_) {
           console.warn('[Camera] video.play() failed (will require user gesture)');
+        }
+      }
+
+      // ズーム対応検出
+      const track = mediaStream.getVideoTracks()[0];
+      if (track) {
+        const caps = track.getCapabilities() as any;
+        if (caps.zoom) {
+          zoomRangeRef.current = { min: caps.zoom.min, max: caps.zoom.max };
+          const settings = track.getSettings() as any;
+          if (settings.zoom) {
+            zoomRef.current = settings.zoom;
+            setZoomValue(settings.zoom);
+          }
+          console.log('[Camera] zoom supported:', caps.zoom.min, '-', caps.zoom.max);
         }
       }
 
@@ -170,28 +221,37 @@ const CameraPage: React.FC = () => {
 
       const srcW = video.videoWidth;
       const srcH = video.videoHeight;
-      const srcAspect = srcW / srcH;
 
       let cropW: number;
       let cropH: number;
+      let cropX: number;
+      let cropY: number;
 
-      if (srcAspect >= TARGET_ASPECT) {
-        // 既に横長（PCカメラや横持ちの場合）→ 高さ基準
-        cropH = srcH;
-        cropW = srcH * TARGET_ASPECT;
-      } else {
-        // 縦長（スマホ縦持ち）→ 幅基準
+      if (orientationMode === 'portrait' || (orientationMode === 'landscape' && isDeviceLandscape)) {
+        // 縦モード or 横モード+横持ち: クロップなし、全フレーム使用
         cropW = srcW;
-        cropH = srcW / TARGET_ASPECT;
+        cropH = srcH;
+        cropX = 0;
+        cropY = 0;
+      } else {
+        // 横モード+縦持ち: 16:9クロップ
+        const srcAspect = srcW / srcH;
+        if (srcAspect >= targetAspect) {
+          cropH = srcH;
+          cropW = srcH * targetAspect;
+        } else {
+          cropW = srcW;
+          cropH = srcW / targetAspect;
+        }
+        cropX = (srcW - cropW) / 2;
+        cropY = (srcH - cropH) / 2;
       }
-
-      const cropX = (srcW - cropW) / 2;
-      const cropY = (srcH - cropH) / 2;
 
       canvas.width = cropW;
       canvas.height = cropH;
 
-      console.log('[Camera] crop capture', {
+      console.log('[Camera] capture', {
+        mode: orientationMode,
         src: `${srcW}x${srcH}`,
         crop: `${Math.round(cropW)}x${Math.round(cropH)}`,
         offset: `(${Math.round(cropX)}, ${Math.round(cropY)})`,
@@ -284,7 +344,7 @@ const CameraPage: React.FC = () => {
         stopCamera();
       }
     }
-  }, [stream]);
+  }, [stream, orientationMode, targetAspect, isDeviceLandscape]);
 
   const handleShutter = () => {
     if (timerSeconds !== null && timerSeconds > 0) {
@@ -331,9 +391,9 @@ const CameraPage: React.FC = () => {
         inspectionItemName?: string;
         evaluationId?: string;
         evaluationType?: string;
-        isSimilar?: boolean;
         positionX?: number;
         positionY?: number;
+        pendingInspectionData?: any;
       };
 
       if (state.isEdit && state.returnPath) {
@@ -355,9 +415,9 @@ const CameraPage: React.FC = () => {
             inspectionItemName: state.inspectionItemName,
             evaluationId: state.evaluationId,
             evaluationType: state.evaluationType,
-            isSimilar: state.isSimilar,
             positionX: state.positionX,
             positionY: state.positionY,
+            pendingInspectionData: state.pendingInspectionData,
           },
         });
       }
@@ -418,42 +478,148 @@ const CameraPage: React.FC = () => {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-black flex flex-col">
-      <header className="bg-gray-800 text-white shadow flex-shrink-0">
-        <div className="px-3 py-2 flex items-center justify-center gap-3">
-          <h1 className="text-sm font-bold whitespace-nowrap">
-            {mode === 'defect' ? '不具合撮影' : mode === 'standard' ? '定形写真撮影' : '通常撮影'}
-          </h1>
-          {timerSeconds !== null && countdown === null && (
-            <span className="text-xs bg-amber-600 px-2 py-0.5 rounded-full">
-              タイマー {timerSeconds}秒
-            </span>
-          )}
-        </div>
-      </header>
+  // ─── ピンチズーム ─────────────────────────────
 
-      <main className="flex-1 flex flex-col items-center justify-center p-4">
+  const applyZoom = useCallback(async (val: number) => {
+    const range = zoomRangeRef.current;
+    if (!range) return;
+    const clamped = Math.max(range.min, Math.min(range.max, val));
+    zoomRef.current = clamped;
+    setZoomValue(clamped);
+    const track = stream?.getVideoTracks()[0];
+    if (!track) return;
+    try {
+      await track.applyConstraints({ advanced: [{ zoom: clamped } as any] });
+    } catch (_) { /* ignore */ }
+  }, [stream]);
+
+  const handlePinchStart = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      const dx = e.touches[1].clientX - e.touches[0].clientX;
+      const dy = e.touches[1].clientY - e.touches[0].clientY;
+      pinchRef.current = {
+        isPinching: true,
+        initialDistance: Math.sqrt(dx * dx + dy * dy),
+        startZoom: zoomRef.current,
+      };
+    }
+  }, []);
+
+  const handlePinchMove = useCallback((e: React.TouchEvent) => {
+    const pinch = pinchRef.current;
+    if (e.touches.length === 2 && pinch.isPinching) {
+      const dx = e.touches[1].clientX - e.touches[0].clientX;
+      const dy = e.touches[1].clientY - e.touches[0].clientY;
+      const currentDistance = Math.sqrt(dx * dx + dy * dy);
+      const scale = currentDistance / pinch.initialDistance;
+      applyZoom(pinch.startZoom * scale);
+      e.preventDefault();
+    }
+  }, [applyZoom]);
+
+  const handlePinchEnd = useCallback(() => {
+    pinchRef.current.isPinching = false;
+  }, []);
+
+  // ─── タップフォーカス ─────────────────────────
+
+  const handleTapFocus = useCallback(async (e: React.TouchEvent) => {
+    // ピンチ操作中は無視、シングルタップのみ
+    if (pinchRef.current.isPinching || e.changedTouches.length !== 1) return;
+
+    const touch = e.changedTouches[0];
+    const target = e.currentTarget as HTMLElement;
+    const rect = target.getBoundingClientRect();
+    const screenX = touch.clientX - rect.left;
+    const screenY = touch.clientY - rect.top;
+    const normX = screenX / rect.width;
+    const normY = screenY / rect.height;
+
+    // フォーカスインジケーター
+    setFocusPoint({ x: screenX, y: screenY });
+    setTimeout(() => setFocusPoint(null), 1000);
+
+    const track = stream?.getVideoTracks()[0];
+    if (!track) return;
+
+    try {
+      await track.applyConstraints({
+        advanced: [{ pointsOfInterest: [{ x: normX, y: normY }] } as any],
+      });
+    } catch {
+      try {
+        await track.applyConstraints({ advanced: [{ focusMode: 'single-shot' } as any] });
+      } catch (_) { /* ignore */ }
+    }
+  }, [stream]);
+
+  return (
+    <div className="fixed inset-0 bg-black flex flex-col">
+      <main className="flex-1 flex flex-col items-center justify-center relative">
         {!capturedImage ? (
-          <div className="relative w-full max-w-3xl">
+          <div className="absolute inset-0">
             {cameraStarted ? (
               <>
-                {/* カメラプレビュー + クロップ枠 */}
-                <div className="relative overflow-hidden rounded-lg">
+                {/* カメラプレビュー（フルスクリーン） */}
+                <div
+                  className="relative w-full h-full overflow-hidden"
+                  style={{ touchAction: 'none' }}
+                  onTouchStart={handlePinchStart}
+                  onTouchMove={handlePinchMove}
+                  onTouchEnd={(e) => { handlePinchEnd(); handleTapFocus(e); }}
+                >
                   <video
                     ref={videoRef}
                     autoPlay
                     playsInline
                     muted
-                    className="w-full h-auto"
+                    className="w-full h-full object-cover"
                   />
-                  {/* 上部マスク */}
-                  <div
-                    className="absolute top-0 left-0 right-0 bg-black/60 pointer-events-none"
-                    style={{ height: 'calc((100% - 100% / (16/9) * (var(--video-aspect, 1))) / 2)' }}
-                  />
-                  {/* クロップオーバーレイ: 上下の暗いマスクで横長枠を示す */}
-                  <CropOverlay videoRef={videoRef} />
+                  {/* クロップオーバーレイ（横モードで縦持ちの場合のみ表示） */}
+                  {orientationMode === 'landscape' && !isDeviceLandscape && (
+                    <CropOverlay videoRef={videoRef} orientationMode={orientationMode} />
+                  )}
+
+                  {/* ズームインジケーター */}
+                  {zoomRangeRef.current && zoomValue > zoomRangeRef.current.min && (
+                    <div className="absolute top-3 left-3 bg-black/60 text-white px-2.5 py-1 rounded-full text-xs font-bold backdrop-blur-sm" style={{ zIndex: 15 }}>
+                      x{zoomValue.toFixed(1)}
+                    </div>
+                  )}
+
+                  {/* 縦/横撮影モードトグル */}
+                  <div className="absolute top-3 right-3 flex rounded-lg overflow-hidden shadow-lg" style={{ zIndex: 15 }}>
+                    <button
+                      onClick={() => { setOrientationMode('portrait');}}
+                      className={`px-3 py-1.5 text-xs font-bold transition-colors ${
+                        orientationMode === 'portrait'
+                          ? 'bg-emerald-500 text-white'
+                          : 'bg-black/50 text-white/60'
+                      }`}
+                    >
+                      縦
+                    </button>
+                    <button
+                      onClick={() => { setOrientationMode('landscape');}}
+                      className={`px-3 py-1.5 text-xs font-bold transition-colors ${
+                        orientationMode === 'landscape'
+                          ? 'bg-emerald-500 text-white'
+                          : 'bg-black/50 text-white/60'
+                      }`}
+                    >
+                      横
+                    </button>
+                  </div>
+
+                  {/* タップフォーカスインジケーター */}
+                  {focusPoint && (
+                    <div
+                      className="absolute pointer-events-none"
+                      style={{ left: focusPoint.x - 25, top: focusPoint.y - 25, zIndex: 15 }}
+                    >
+                      <div className="w-[50px] h-[50px] border-2 border-yellow-400 rounded-lg animate-pulse" />
+                    </div>
+                  )}
 
                   {/* カウントダウン表示 */}
                   {countdown !== null && (
@@ -469,7 +635,7 @@ const CameraPage: React.FC = () => {
                 </div>
 
                 {/* ボタン群 */}
-                <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-4" style={{ zIndex: 30 }}>
+                <div className="absolute bottom-4 left-0 right-0 flex justify-center items-center gap-4" style={{ zIndex: 30 }}>
                   {countdown !== null ? (
                     <button
                       onClick={handleCancelCountdown}
@@ -479,8 +645,21 @@ const CameraPage: React.FC = () => {
                     </button>
                   ) : (
                     <>
+                      {/* タイマー撮影ボタン（タイマー設定時のみ表示） */}
+                      {timerSeconds !== null && timerSeconds > 0 && (
+                        <button
+                          onClick={handleShutter}
+                          className="flex flex-col items-center gap-0.5 px-3 py-2 bg-amber-600 text-white rounded-xl font-semibold transition-all active:scale-95"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span className="text-xs">{timerSeconds}秒</span>
+                        </button>
+                      )}
+                      {/* 即時撮影ボタン（常に表示） */}
                       <button
-                        onClick={handleShutter}
+                        onClick={captureImage}
                         className="w-16 h-16 bg-white rounded-full border-4 border-gray-300 hover:border-emerald-500 transition"
                       />
                       <button
@@ -531,12 +710,17 @@ const CameraPage: React.FC = () => {
 };
 
 /**
- * クロップオーバーレイ: video要素の上に16:9横長枠を表示
- * 枠外を半透明黒でマスクする
+ * クロップオーバーレイ: video要素の上にクロップ枠を表示
+ * portrait: 9:16縦長枠（左右マスク）, landscape: 16:9横長枠（上下マスク）
  */
-const CropOverlay: React.FC<{ videoRef: React.RefObject<HTMLVideoElement | null> }> = ({ videoRef }) => {
-  const [maskHeight, setMaskHeight] = useState(0);
+const CropOverlay: React.FC<{
+  videoRef: React.RefObject<HTMLVideoElement | null>;
+  orientationMode: OrientationMode;
+}> = ({ videoRef, orientationMode }) => {
+  const [mask, setMask] = useState<{ type: 'tb' | 'lr'; size: number }>({ type: 'tb', size: 0 });
   const rafRef = useRef<number>(0);
+
+  const aspect = orientationMode === 'landscape' ? LANDSCAPE_ASPECT : PORTRAIT_ASPECT;
 
   useEffect(() => {
     const update = () => {
@@ -546,7 +730,6 @@ const CropOverlay: React.FC<{ videoRef: React.RefObject<HTMLVideoElement | null>
         const containerHeight = video.clientHeight;
         const videoAspect = video.videoWidth / video.videoHeight;
 
-        // video要素内での実際の映像表示サイズを計算
         let displayW: number;
         let displayH: number;
         if (containerWidth / containerHeight > videoAspect) {
@@ -557,43 +740,45 @@ const CropOverlay: React.FC<{ videoRef: React.RefObject<HTMLVideoElement | null>
           displayH = containerWidth / videoAspect;
         }
 
-        // 16:9クロップ領域の高さ
-        const cropDisplayH = displayW / TARGET_ASPECT;
-        // マスクする上下の高さ (映像表示領域からはみ出す部分)
-        const mask = Math.max(0, (displayH - cropDisplayH) / 2);
-        // コンテナ全体の高さに対するオフセット
-        const containerOffsetY = (containerHeight - displayH) / 2;
-        setMaskHeight(containerOffsetY + mask);
+        const displayAspect = displayW / displayH;
+
+        if (aspect >= displayAspect) {
+          // クロップ領域が表示領域より横長 → 上下をマスク
+          const cropH = displayW / aspect;
+          const maskSize = Math.max(0, (displayH - cropH) / 2);
+          const containerOffsetY = (containerHeight - displayH) / 2;
+          setMask({ type: 'tb', size: containerOffsetY + maskSize });
+        } else {
+          // クロップ領域が表示領域より縦長 → 左右をマスク
+          const cropW = displayH * aspect;
+          const maskSize = Math.max(0, (displayW - cropW) / 2);
+          const containerOffsetX = (containerWidth - displayW) / 2;
+          setMask({ type: 'lr', size: containerOffsetX + maskSize });
+        }
       }
       rafRef.current = requestAnimationFrame(update);
     };
     rafRef.current = requestAnimationFrame(update);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [videoRef]);
+  }, [videoRef, aspect]);
 
-  if (maskHeight <= 0) return null;
+  if (mask.size <= 0) return null;
+
+  if (mask.type === 'tb') {
+    return (
+      <>
+        <div className="absolute top-0 left-0 right-0 bg-black/60 pointer-events-none" style={{ height: `${mask.size}px`, zIndex: 10 }} />
+        <div className="absolute bottom-0 left-0 right-0 bg-black/60 pointer-events-none" style={{ height: `${mask.size}px`, zIndex: 10 }} />
+        <div className="absolute left-0 right-0 border-2 border-white/50 pointer-events-none" style={{ top: `${mask.size}px`, bottom: `${mask.size}px`, zIndex: 10 }} />
+      </>
+    );
+  }
 
   return (
     <>
-      {/* 上部マスク */}
-      <div
-        className="absolute top-0 left-0 right-0 bg-black/60 pointer-events-none"
-        style={{ height: `${maskHeight}px`, zIndex: 10 }}
-      />
-      {/* 下部マスク */}
-      <div
-        className="absolute bottom-0 left-0 right-0 bg-black/60 pointer-events-none"
-        style={{ height: `${maskHeight}px`, zIndex: 10 }}
-      />
-      {/* 枠線 */}
-      <div
-        className="absolute left-0 right-0 border-2 border-white/50 pointer-events-none"
-        style={{
-          top: `${maskHeight}px`,
-          bottom: `${maskHeight}px`,
-          zIndex: 10,
-        }}
-      />
+      <div className="absolute top-0 left-0 bottom-0 bg-black/60 pointer-events-none" style={{ width: `${mask.size}px`, zIndex: 10 }} />
+      <div className="absolute top-0 right-0 bottom-0 bg-black/60 pointer-events-none" style={{ width: `${mask.size}px`, zIndex: 10 }} />
+      <div className="absolute top-0 bottom-0 border-2 border-white/50 pointer-events-none" style={{ left: `${mask.size}px`, right: `${mask.size}px`, zIndex: 10 }} />
     </>
   );
 };

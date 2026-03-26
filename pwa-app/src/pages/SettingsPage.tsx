@@ -7,8 +7,9 @@ const TIMER_SETTING_KEY = 'cameraTimerSeconds';
 const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
   const [timerEnabled, setTimerEnabled] = useState(false);
-  const [timerSeconds, setTimerSeconds] = useState(5);
+  const [timerSeconds, setTimerSeconds] = useState<number | string>(5);
   const [saved, setSaved] = useState(false);
+  const [timerError, setTimerError] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -22,7 +23,15 @@ const SettingsPage: React.FC = () => {
   }, []);
 
   const handleSave = async () => {
-    const value = timerEnabled ? timerSeconds : null;
+    if (timerEnabled) {
+      const num = typeof timerSeconds === 'number' ? timerSeconds : parseInt(String(timerSeconds), 10);
+      if (!num || num < 1 || num > 30 || isNaN(num)) {
+        setTimerError('1〜30の秒数を入力してください');
+        return;
+      }
+    }
+    setTimerError(null);
+    const value = timerEnabled ? (typeof timerSeconds === 'number' ? timerSeconds : parseInt(String(timerSeconds), 10)) : null;
     await setSetting(TIMER_SETTING_KEY, value);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -30,15 +39,27 @@ const SettingsPage: React.FC = () => {
 
   const handleTimerToggle = (enabled: boolean) => {
     setTimerEnabled(enabled);
+    setTimerError(null);
     setSaved(false);
   };
 
   const handleSecondsChange = (value: string) => {
-    const num = parseInt(value, 10);
-    if (!isNaN(num) && num >= 1 && num <= 30) {
-      setTimerSeconds(num);
-      setSaved(false);
+    setTimerError(null);
+    setSaved(false);
+    if (value === '') {
+      setTimerSeconds('');
+      return;
     }
+    const num = parseInt(value, 10);
+    if (!isNaN(num) && num >= 0 && num <= 30) {
+      setTimerSeconds(num);
+    }
+  };
+
+  const handleClearSeconds = () => {
+    setTimerSeconds('');
+    setTimerError(null);
+    setSaved(false);
   };
 
   return (
@@ -108,19 +129,36 @@ const SettingsPage: React.FC = () => {
                 />
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium text-slate-700">ON</span>
-                  <input
-                    type="number"
-                    min={1}
-                    max={30}
-                    value={timerSeconds}
-                    onChange={(e) => handleSecondsChange(e.target.value)}
-                    disabled={!timerEnabled}
-                    className="w-16 px-2 py-1 border border-slate-300 rounded-lg text-center text-sm font-semibold disabled:opacity-40 disabled:bg-slate-100"
-                  />
-                  <span className="text-sm text-slate-600">秒</span>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min={1}
+                      max={30}
+                      value={timerSeconds}
+                      onChange={(e) => handleSecondsChange(e.target.value)}
+                      onFocus={(e) => e.target.select()}
+                      disabled={!timerEnabled}
+                      className={`w-16 px-2 py-1 border rounded-lg text-center text-sm font-semibold disabled:opacity-40 disabled:bg-slate-100 ${
+                        timerError ? 'border-red-400' : 'border-slate-300'
+                      }`}
+                    />
+                    {timerEnabled && timerSeconds !== '' && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleClearSeconds(); }}
+                        className="absolute -right-5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-500 text-sm"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                  <span className="text-sm text-slate-600 ml-1">秒</span>
                   <span className="text-xs text-slate-400">（1〜30）</span>
                 </div>
               </label>
+              {timerError && (
+                <p className="text-red-500 text-xs ml-2">{timerError}</p>
+              )}
             </div>
           </div>
 
