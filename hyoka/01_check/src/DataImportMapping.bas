@@ -405,7 +405,7 @@ Public Function GetMaintenanceMapping() As Object
 
         If mapWs.Cells(r, 22).Value <> "" Then inner("good") = CStr(mapWs.Cells(r, 22).Value)
 
-        If mapWs.Cells(r, 23).Value <> "" Then inner("defect") = CStr(mapWs.Cells(r, 23).Value)
+        If mapWs.Cells(r, 23).Value <> "" Then inner("no_issue") = CStr(mapWs.Cells(r, 23).Value)
 
 
 
@@ -612,7 +612,7 @@ Public Function GetRemarksMapping() As Object
         Dim remarkKey As String
         remarkKey = CStr(mapWs.Cells(r, 44).Value)
         Dim cellAddr As String
-        cellAddr = CStr(mapWs.Cells(r, 46).Value)
+        cellAddr = CStr(mapWs.Cells(r, 45).Value)
         If cellAddr <> "" Then d(remarkKey) = cellAddr
         r = r + 1
     Loop

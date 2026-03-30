@@ -14,7 +14,7 @@ Public Const SURVEY_SHEET As String = "現地調査"
 Public Const MAPPING_SHEET As String = "マッピング"
 Public Const TEMPLATE_C As String = "評価c劣化事象"      ' Sheet3テンプレート
 Public Const TEMPLATE_B2 As String = "評価b2劣化事象"    ' Sheet4テンプレート
-Public Const MAX_IMAGES_PER_SHEET As Long = 12
+Public Const MAX_IMAGES_PER_SHEET As Long = 18
 Public Const PIN_SIZE As Double = 14   ' ピンマーカーサイズ(pt)
 Public Const THUMBNAIL_W As Double = 120 ' サムネイル幅(pt)
 Public Const THUMBNAIL_H As Double = 90  ' サムネイル高(pt)
@@ -59,7 +59,15 @@ Public Sub ImportJsonData()
         lastSlash = InStrRev(jsonFilePath, "/")
         If lastSlash > 0 Then m_ImageFolder = Left(jsonFilePath, lastSlash - 1)
     #Else
-        m_ImageFolder = Left(jsonFilePath, InStrRev(jsonFilePath, "\") - 1)
+        Dim lastBackslash As Long
+        Dim pathSep As String
+        pathSep = Chr(92)
+        lastBackslash = InStrRev(jsonFilePath, pathSep)
+        If lastBackslash > 0 Then
+            m_ImageFolder = Left(jsonFilePath, lastBackslash - 1)
+        Else
+            m_ImageFolder = Left(jsonFilePath, InStrRev(jsonFilePath, "/") - 1)
+        End If
     #End If
 
     ' 確認ダイアログ
@@ -87,7 +95,7 @@ Public Sub ImportJsonData()
 
 
 
-    On Error GoTo ErrorHandler
+    ' DEBUGOFF On Error GoTo 0
     Dim currentPhase As String
     currentPhase = "初期化"
 
@@ -106,6 +114,13 @@ Public Sub ImportJsonData()
     Dim jsonText As String
 
     jsonText = ReadUtf8File(jsonFilePath)
+
+    ' BOM除去 (ADODB.StreamがUTF-8 BOMをU+FEFFとして残す場合がある)
+    If Len(jsonText) > 0 Then
+        If AscW(Left(jsonText, 1)) = &HFEFF Then
+            jsonText = Mid(jsonText, 2)
+        End If
+    End If
 
 
 
@@ -164,6 +179,10 @@ Public Sub ImportJsonData()
     ' シート再保護
     currentPhase = "後処理: シート再保護"
     ReprotectAllSheets
+
+    ' シート並べ替え
+    currentPhase = "後処理: シート並べ替え"
+    ArrangeSheets
 
     ' 一時ファイル削除
     CleanupTempFiles
@@ -272,8 +291,6 @@ Public Function SelectJsonFile() As String
         If result = "" Then
             filePath = False
         Else
-            ' デバッグ: パスを確認
-            MsgBox "選択されたパス: [" & result & "]" & vbCrLf & "長さ: " & Len(result), vbInformation, "デバッグ"
             filePath = result
         End If
     #Else
@@ -420,13 +437,8 @@ Public Function ReadUtf8File(ByVal filePath As String) As String
         stream.Open
 
         stream.LoadFromFile filePath
-
         ReadUtf8File = stream.ReadText
-
         stream.Close
-
-
-
         Set stream = Nothing
 
     #End If
@@ -446,7 +458,7 @@ Public Sub CreateTempFolder()
 
     #Else
 
-        m_TempFolder = Environ("TEMP") & "\KennetImport_" & Format(Now, "yyyymmdd_hhnnss")
+        m_TempFolder = Environ("TEMP") & Chr(92) & "KennetImport_" & Format(Now, "yyyymmdd_hhnnss")
 
         Dim fso As Object
 
@@ -553,12 +565,15 @@ Public Function ResolveImagePath(imageFile As String) As String
     
     Dim fullPath As String
     #If Mac Then
-        ' POSIXパスで結合
+        ' Mac: POSIXパスで結合
         fullPath = m_ImageFolder & "/" & Replace(imageFile, "\", "/")
-        ' VBAのOpen用にMac形式パスに変換
-        ResolveImagePath = ConvertPosixToMacPath(fullPath)
+        ' Mac形式パス（Dir/Open用）とPOSIXパス（AddPicture用）の両方を試す
+        ' AddPictureはMac Excel 2016+ではPOSIXパスを受け付ける
+        ResolveImagePath = fullPath
     #Else
-        fullPath = m_ImageFolder & "\" & Replace(imageFile, "/", "\")
+        Dim sep As String
+        sep = Chr(92)
+        fullPath = m_ImageFolder & sep & Replace(imageFile, "/", sep)
         ResolveImagePath = fullPath
     #End If
 End Function
@@ -616,7 +631,7 @@ Public Function DecodeBase64ToTempFile(ByVal base64Data As String, Optional ByVa
 
     #Else
 
-        sep = "\"
+        sep = Chr(92)
 
     #End If
 
@@ -998,4 +1013,138 @@ Public Sub CreateImportButton()
 
     MsgBox "「JSONデータ取り込み」ボタンを配置しました。", vbInformation
 
+End Sub
+
+
+'' シート並べ替え
+'' 指定の順序にシートタブを整列する
+Public Sub ArrangeSheets()
+    On Error Resume Next
+    Dim ws As Worksheet
+    Dim i As Long
+    Dim pos As Long
+    pos = 0
+
+    ' 1. 固定シート: 机上チェックシート、現地調査、定型写真
+    Dim fixedNames As Variant
+    fixedNames = Array("机上チェックシート", "現地調査", "定型写真")
+    Dim fn As Variant
+    For Each fn In fixedNames
+        Set ws = Nothing
+        Set ws = Worksheets(CStr(fn))
+        If Not ws Is Nothing Then
+            pos = pos + 1
+            ws.Move Before:=Worksheets(pos)
+        End If
+    Next fn
+
+    ' 2. 評価c劣化事象_* シート群
+    Dim names() As String
+    Dim cnt As Long
+
+    ' c劣化事象
+    cnt = 0
+    ReDim names(0)
+    For Each ws In Worksheets
+        If Left(ws.Name, 7) = "評価c劣化事象" Then
+            cnt = cnt + 1
+            ReDim Preserve names(cnt)
+            names(cnt) = ws.Name
+        End If
+    Next ws
+    If cnt > 0 Then
+        SortStringArray names, 1, cnt
+        For i = 1 To cnt
+            Worksheets(names(i)).Move After:=Worksheets(pos + i - 1)
+        Next i
+        pos = pos + cnt
+    End If
+
+    ' 3. 評価「c」写真キープラン_* シート群
+    cnt = 0
+    ReDim names(0)
+    For Each ws In Worksheets
+        If Left(ws.Name, 12) = "評価「c」写真キープラン" Then
+            cnt = cnt + 1
+            ReDim Preserve names(cnt)
+            names(cnt) = ws.Name
+        End If
+    Next ws
+    If cnt > 0 Then
+        SortStringArray names, 1, cnt
+        For i = 1 To cnt
+            Worksheets(names(i)).Move After:=Worksheets(pos + i - 1)
+        Next i
+        pos = pos + cnt
+    End If
+
+    ' 4. 評価b2劣化事象_* シート群
+    cnt = 0
+    ReDim names(0)
+    For Each ws In Worksheets
+        If Left(ws.Name, 8) = "評価b2劣化事象" Then
+            cnt = cnt + 1
+            ReDim Preserve names(cnt)
+            names(cnt) = ws.Name
+        End If
+    Next ws
+    If cnt > 0 Then
+        SortStringArray names, 1, cnt
+        For i = 1 To cnt
+            Worksheets(names(i)).Move After:=Worksheets(pos + i - 1)
+        Next i
+        pos = pos + cnt
+    End If
+
+    ' 5. 評価「b2」写真キープラン_* シート群
+    cnt = 0
+    ReDim names(0)
+    For Each ws In Worksheets
+        If Left(ws.Name, 13) = "評価「b2」写真キープラン" Then
+            cnt = cnt + 1
+            ReDim Preserve names(cnt)
+            names(cnt) = ws.Name
+        End If
+    Next ws
+    If cnt > 0 Then
+        SortStringArray names, 1, cnt
+        For i = 1 To cnt
+            Worksheets(names(i)).Move After:=Worksheets(pos + i - 1)
+        Next i
+        pos = pos + cnt
+    End If
+
+    ' 6. マッピング
+    Set ws = Nothing
+    Set ws = Worksheets("マッピング")
+    If Not ws Is Nothing Then
+        pos = pos + 1
+        ws.Move After:=Worksheets(pos - 1)
+    End If
+
+    ' 7. KPマッピング
+    Set ws = Nothing
+    Set ws = Worksheets("KPマッピング")
+    If Not ws Is Nothing Then
+        pos = pos + 1
+        ws.Move After:=Worksheets(pos - 1)
+    End If
+
+    On Error GoTo 0
+End Sub
+
+'' 文字列配列のバブルソート（1-based）
+Private Sub SortStringArray(arr() As String, lb As Long, ub As Long)
+    Dim i As Long
+    Dim j As Long
+    Dim tmp As String
+    For i = lb To ub - 1
+        For j = lb To ub - (i - lb) - 1
+            If arr(j) > arr(j + 1) Then
+                tmp = arr(j)
+                arr(j) = arr(j + 1)
+                arr(j + 1) = tmp
+            End If
+        Next j
+    Next i
 End Sub

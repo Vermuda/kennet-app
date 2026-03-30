@@ -59,7 +59,7 @@ Public Sub ImportToOnsiteSurveySheet(jsonData As Object)
                 subPhase = "ImportGroupExistence"
                 ImportGroupExistence ws, checklist("groupExistence")
 
-            End If
+                            End If
 
 
 
@@ -205,56 +205,24 @@ Public Sub ImportPropertyInfo(ws As Worksheet, jsonData As Object)
             End If
         End If
 
-        ' 天候
+        ' 天候（文字列をそのまま書き込み）
         If prop.Exists("weather") Then
             If propMap.Exists("prop_weather") Then
-                Dim weatherCell As String
-                weatherCell = propMap("prop_weather")
-                Dim weatherVal As String
-                weatherVal = CStr(prop("weather"))
-
-                Dim weatherOffset As Long
-                Select Case weatherVal
-                    Case ChrW(&H6674)  ' 晴
-                        weatherOffset = 0
-                    Case ChrW(&H66C7)  ' 曇
-                        weatherOffset = 1
-                    Case ChrW(&H96E8)  ' 雨
-                        weatherOffset = 2
-                    Case ChrW(&H96EA)  ' 雪
-                        weatherOffset = 3
-                    Case Else
-                        weatherOffset = -1
-                End Select
-
-                If weatherOffset >= 0 Then
-                    If weatherOffset = 0 Then
-                        SetCellValueSafe ws, weatherCell, ChrW(&H25A0)
-                    Else
-                        ' セルアドレスから列をオフセット
-                        Dim weatherRange As Range
-                        Set weatherRange = ws.Range(weatherCell)
-                        If Not weatherRange Is Nothing Then
-                            Dim targetCell As Range
-                            Set targetCell = weatherRange.Offset(0, weatherOffset)
-                            SetCellValueSafe ws, targetCell.Address(False, False), ChrW(&H25A0)
-                        End If
-                    End If
-                End If
+                SetCellValueSafe ws, propMap("prop_weather"), CStr(prop("weather"))
             End If
         End If
 
         ' 調査開始時間
         If prop.Exists("inspectionStartTime") Then
             If propMap.Exists("prop_time_start") Then
-                SetCellValueSafe ws, propMap("prop_time_start"), CStr(prop("inspectionStartTime"))
+                SetCellValueSafe ws, propMap("prop_time_start"), FormatIsoDateTime(CStr(prop("inspectionStartTime")))
             End If
         End If
 
         ' 調査終了時間
         If prop.Exists("inspectionEndTime") Then
             If propMap.Exists("prop_time_end") Then
-                SetCellValueSafe ws, propMap("prop_time_end"), CStr(prop("inspectionEndTime"))
+                SetCellValueSafe ws, propMap("prop_time_end"), FormatIsoDateTime(CStr(prop("inspectionEndTime")))
             End If
         End If
     End If
@@ -282,6 +250,8 @@ Public Sub ImportEvaluations(ws As Worksheet, evaluations As Object)
     Dim cMap As Object
 
     Set cMap = GetCCellMapping()
+    Dim optMap As Object
+    Set optMap = GetOptionMapping()
 
 
 
@@ -311,6 +281,12 @@ Public Sub ImportEvaluations(ws As Worksheet, evaluations As Object)
 
         ' 評価値に応じたセルにチェックマーク入力
         ' a=aMap, b1=b1Map, b2=b2Map, c=cMap（マッピングシートG/H/B/C列）
+        ' worstEvalが空の場合（select型等）、最初のeval値を使用
+        If worstEval = "" And evalList.Count > 0 Then
+            Dim firstEvalObj As Object
+            Set firstEvalObj = evalList(1)
+            If firstEvalObj.Exists("eval") Then worstEval = CStr(firstEvalObj("eval"))
+        End If
         Select Case worstEval
             Case "a"
                 If aMap.Exists(itemId) Then
@@ -320,6 +296,22 @@ Public Sub ImportEvaluations(ws As Worksheet, evaluations As Object)
                 If b1Map.Exists(itemId) Then
                     SetCellValueSafe ws, b1Map(itemId), ChrW(&H25A0)
                 End If
+            Case "S"
+                If aMap.Exists(itemId) Then
+                    SetCellValueSafe ws, aMap(itemId), ChrW(&H25A0)
+                End If
+            Case "A"
+                If b1Map.Exists(itemId) Then
+                    SetCellValueSafe ws, b1Map(itemId), ChrW(&H25A0)
+                End If
+            Case "B"
+                If b2Map.Exists(itemId) Then
+                    SetCellValueSafe ws, b2Map(itemId), ChrW(&H25A0)
+                End If
+            Case "C"
+                If cMap.Exists(itemId) Then
+                    SetCellValueSafe ws, cMap(itemId), ChrW(&H25A0)
+                End If
             Case "b2"
                 If b2Map.Exists(itemId) Then
                     SetCellValueSafe ws, b2Map(itemId), ChrW(&H25A0) ' ■
@@ -328,6 +320,12 @@ Public Sub ImportEvaluations(ws As Worksheet, evaluations As Object)
                 If cMap.Exists(itemId) Then
                     SetCellValueSafe ws, cMap(itemId), ChrW(&H25A0) ' ■
                 End If
+            Case "30cm＞"
+                If optMap.Exists("height_lt30") Then SetCellValueSafe ws, optMap("height_lt30"), ChrW(&H25A0)
+            Case "30cm≦"
+                If optMap.Exists("height_gte30") Then SetCellValueSafe ws, optMap("height_gte30"), ChrW(&H25A0)
+            Case "40cm≦"
+                If optMap.Exists("height_gte40") Then SetCellValueSafe ws, optMap("height_gte40"), ChrW(&H25A0)
         End Select
     Next itemId
 
@@ -366,19 +364,19 @@ Public Function GetWorstEvaluation(evalList As Object) As String
 
             Select Case ev
 
-                Case "c"
+                Case "c", "C"
 
                     worst = "c"
 
-                Case "b2"
+                Case "b2", "B"
 
                     If worst <> "c" Then worst = "b2"
 
-                Case "b1"
+                Case "b1", "A"
 
                     If worst <> "c" And worst <> "b2" Then worst = "b1"
 
-                Case "a"
+                Case "a", "S"
 
                     If worst = "" Or worst = "na" Then worst = "a"
                 Case "na"
@@ -693,19 +691,80 @@ Public Sub ImportOptions(ws As Worksheet, options As Object)
 
             Dim optKey As String
 
-            optKey = BuildOptionKey(CStr(label), val)
-
-
-
-            If optMap.Exists(optKey) Then
-
-                SetCellValueSafe ws, optMap(optKey), ChrW(&H25A0)
-
+            If IsObject(val) Then
+                ' 配列値: 各要素を個別に処理
+                Dim arrIdx As Long
+                For arrIdx = 1 To val.Count
+                    Dim arrKey As String
+                    arrKey = BuildOptionKey(CStr(label), CStr(val(arrIdx)))
+                    If arrKey <> "" And optMap.Exists(arrKey) Then
+                        If Right(arrKey, 5) = "_text" Or Right(arrKey, 7) = "_reason" Then
+                            SetCellValueSafe ws, optMap(arrKey), CStr(val(arrIdx))
+                        Else
+                            SetCellValueSafe ws, optMap(arrKey), ChrW(&H25A0)
+                        End If
+                    End If
+                Next arrIdx
+            Else
+                optKey = BuildOptionKey(CStr(label), val)
+                If optKey <> "" And optMap.Exists(optKey) Then
+                    If Right(optKey, 5) = "_text" Or Right(optKey, 7) = "_reason" Then
+                        SetCellValueSafe ws, optMap(optKey), CStr(val)
+                    Else
+                        SetCellValueSafe ws, optMap(optKey), ChrW(&H25A0)
+                    End If
+                End If
             End If
 
         Next label
 
     Next itemId
+
+
+    ' スコープ不可理由: groupIdで区別して書き込み
+    If options.Exists("group_yukashita") Then
+        If IsObject(options("group_yukashita")) Then
+            Dim ykObj As Object
+            Set ykObj = options("group_yukashita")
+            If ykObj.Exists("スコープ不可理由") Then
+                If optMap.Exists("scope_reason_yukashita") Then
+                    SetCellValueSafe ws, optMap("scope_reason_yukashita"), CStr(ykObj("スコープ不可理由"))
+                End If
+            End If
+        End If
+    End If
+    If options.Exists("group_koyaura") Then
+        If IsObject(options("group_koyaura")) Then
+            Dim kyObj As Object
+            Set kyObj = options("group_koyaura")
+            If kyObj.Exists("スコープ不可理由") Then
+                If optMap.Exists("scope_reason_koyaura") Then
+                    SetCellValueSafe ws, optMap("scope_reason_koyaura"), CStr(kyObj("スコープ不可理由"))
+                End If
+            End If
+        End If
+    End If
+
+    ' 屋外階段: item72.設置 → テーブルBのgroup_okugai_kaidanに書き込み
+    If options.Exists("item72") Then
+        Dim item72Obj As Object
+        If IsObject(options("item72")) Then
+            Set item72Obj = options("item72")
+            If item72Obj.Exists("設置") Then
+                Dim grpMap3 As Object
+                Set grpMap3 = GetGroupExistenceMapping()
+                If grpMap3.Exists("group_okugai_kaidan") Then
+                    Dim kInner As Object
+                    Set kInner = grpMap3("group_okugai_kaidan")
+                    If CStr(item72Obj("設置")) = "該当有" Then
+                        If kInner.Exists("yes") Then SetCellValueSafe ws, kInner("yes"), ChrW(&H25A0)
+                    Else
+                        If kInner.Exists("no") Then SetCellValueSafe ws, kInner("no"), ChrW(&H25A0)
+                    End If
+                End If
+            End If
+        End If
+    End If
 
 End Sub
 
@@ -749,7 +808,7 @@ Public Function BuildOptionKey(label As String, val As Variant) As String
                 Case "不明": BuildOptionKey = "insulation_unknown"
                 Case Else: BuildOptionKey = ""
             End Select
-        Case "小屋裏・軒裏換気口の設置"
+        Case "小屋裏・軒裏換気口の設置", "換気口設置"
             Select Case valStr
                 Case "設置有": BuildOptionKey = "koyaura_vent_yes"
                 Case "設置無": BuildOptionKey = "koyaura_vent_no"
@@ -763,7 +822,7 @@ Public Function BuildOptionKey(label As String, val As Variant) As String
                 Case "40cm≦": BuildOptionKey = "height_gte40"
                 Case Else: BuildOptionKey = ""
             End Select
-        Case "外壁の種類"
+        Case "外壁の種類", "外壁の種類_木造", "外壁の種類_鉄骨", "外壁の種類_RC"
             Select Case valStr
                 Case "吹付タイル": BuildOptionKey = "wall_type_fukitsuke"
                 Case "モルタル塗り": BuildOptionKey = "wall_type_mortar"
@@ -785,7 +844,7 @@ Public Function BuildOptionKey(label As String, val As Variant) As String
                 Case "120≦": BuildOptionKey = "pillar_gte120"
                 Case Else: BuildOptionKey = ""
             End Select
-        Case "外壁"
+        Case "外壁", "外壁工法"
             Select Case valStr
                 Case "通気無": BuildOptionKey = "wall_air_none"
                 Case "通気工法": BuildOptionKey = "wall_air_flow"
@@ -793,7 +852,7 @@ Public Function BuildOptionKey(label As String, val As Variant) As String
                 Case "乾式": BuildOptionKey = "wall_air_dry"
                 Case Else: BuildOptionKey = ""
             End Select
-        Case "コンクリート面仕上材"
+        Case "コンクリート面仕上材", "concreteFinish"
             Select Case valStr
                 Case "コンクリート打放（増打無）": BuildOptionKey = "concrete_bare"
                 Case "吹付タイル": BuildOptionKey = "concrete_fukitsuke"
@@ -802,7 +861,7 @@ Public Function BuildOptionKey(label As String, val As Variant) As String
                 Case "石貼り": BuildOptionKey = "concrete_stone"
                 Case Else: BuildOptionKey = ""
             End Select
-        Case "庇の出（目測）"
+        Case "庇の出（目測）", "庇の出", "eavesProjection"
             Select Case valStr
                 Case "300＞": BuildOptionKey = "eave_lt300"
                 Case "300≦": BuildOptionKey = "eave_gte300"
@@ -810,7 +869,7 @@ Public Function BuildOptionKey(label As String, val As Variant) As String
                 Case "900≦": BuildOptionKey = "eave_gte900"
                 Case Else: BuildOptionKey = ""
             End Select
-        Case "軒の出（目測）"
+        Case "軒の出（目測）", "軒の出", "soffit"
             Select Case valStr
                 Case "300＞": BuildOptionKey = "cornice_lt300"
                 Case "300≦": BuildOptionKey = "cornice_gte300"
@@ -819,9 +878,12 @@ Public Function BuildOptionKey(label As String, val As Variant) As String
                 Case Else: BuildOptionKey = ""
             End Select
         Case "設置"
-            ' 屋外階段の該当有/無はテーブルB(グループ有無)で処理するためスキップ
-            BuildOptionKey = ""
-        Case "屋根仕様"
+            Select Case valStr
+                Case "該当有": BuildOptionKey = "outdoor_stairs_yes"
+                Case "該当無": BuildOptionKey = "outdoor_stairs_no"
+                Case Else: BuildOptionKey = ""
+            End Select
+        Case "屋根仕様", "roofSpec"
             Select Case valStr
                 Case "陸屋根": BuildOptionKey = "roof_flat"
                 Case "金属板葺き": BuildOptionKey = "roof_metal"
@@ -830,13 +892,13 @@ Public Function BuildOptionKey(label As String, val As Variant) As String
                 Case "桟瓦葺き": BuildOptionKey = "roof_tile"
                 Case Else: BuildOptionKey = "roof_other"
             End Select
-        Case "撮影棒による画像確認"
+        Case "撮影棒による画像確認", "撮影棒確認", "poleCheck"
             Select Case valStr
                 Case "実施可": BuildOptionKey = "camera_rod_yes"
                 Case "実施不可": BuildOptionKey = "camera_rod_no"
                 Case Else: BuildOptionKey = ""
             End Select
-        Case "防水工法"
+        Case "防水工法", "waterproofMethod"
             Select Case valStr
                 Case "アスファルト防水": BuildOptionKey = "wp_asphalt"
                 Case "シート防水": BuildOptionKey = "wp_sheet"
@@ -844,20 +906,49 @@ Public Function BuildOptionKey(label As String, val As Variant) As String
                 Case "FRP防水": BuildOptionKey = "wp_frp"
                 Case Else: BuildOptionKey = "wp_other"
             End Select
-        Case "確認方法"
+        Case "確認方法", "checkMethod"
             Select Case valStr
                 Case "屋上にて目視確認": BuildOptionKey = "check_visual"
-                Case "撮影棒による画像確認": BuildOptionKey = "check_camera_rod"
+                Case "撮影棒による画像確認", "撮影棒確認", "poleCheck": BuildOptionKey = "check_camera_rod"
                 Case "実施不可": BuildOptionKey = "check_impossible"
                 Case Else: BuildOptionKey = ""
             End Select
-        Case "仕上材の種類"
+        Case "仕上材の種類", "finishType"
             Select Case valStr
                 Case "コンクリート直仕上げ": BuildOptionKey = "finish_main_concrete"
                 Case "モルタル仕上げ", "その他塗り仕上げ", "モルタル仕上げ・その他塗り仕上げ": BuildOptionKey = "finish_main_mortar"
                 Case "その他仕上げ": BuildOptionKey = "finish_main_other"
                 Case Else: BuildOptionKey = ""
             End Select
+                Case "スコープ調査実施"
+            Select Case valStr
+                Case "実施可": BuildOptionKey = "scope_possible"
+                Case "実施不可": BuildOptionKey = "scope_impossible"
+                Case Else: BuildOptionKey = ""
+            End Select
+        Case "スコープ調査方面"
+            Select Case valStr
+                Case "東": BuildOptionKey = "scope_east"
+                Case "西": BuildOptionKey = "scope_west"
+                Case "南": BuildOptionKey = "scope_south"
+                Case "北（優先）", "北": BuildOptionKey = "scope_north"
+                Case Else: BuildOptionKey = ""
+            End Select
+        Case "基礎形式その他"
+            BuildOptionKey = "foundation_other_text"
+        Case "屋根仕様その他"
+            BuildOptionKey = "roof_other_text"
+        Case "撮影棒不可理由"
+            BuildOptionKey = "pole_check_reason"
+        Case "防水工法その他"
+            BuildOptionKey = "wp_other_text"
+        Case "確認不可理由"
+            BuildOptionKey = "check_method_reason"
+        Case "その他仕上げ詳細"
+            BuildOptionKey = "finish_other_text"
+        Case "構造種別"
+            ' 構造種別は直接のチェック欄なし（外壁種類選択に影響）
+            BuildOptionKey = ""
         Case Else
             BuildOptionKey = ""
     End Select
@@ -880,7 +971,11 @@ Public Sub ImportMaintenanceStatus(ws As Worksheet, maintStatus As Object)
 
     For Each catId In maintStatus.Keys
 
-        If maintMap.Exists(CStr(catId)) Then
+        ' data.jsonのキー "maint_cat1" → マッピングのキー "cat1" に変換
+        Dim lookupKey As String
+        lookupKey = CStr(catId)
+        If Left(lookupKey, 6) = "maint_" Then lookupKey = Mid(lookupKey, 7)
+        If maintMap.Exists(lookupKey) Then
 
             Dim status As Object
 
@@ -890,7 +985,7 @@ Public Sub ImportMaintenanceStatus(ws As Worksheet, maintStatus As Object)
 
             Dim inner As Object
 
-            Set inner = maintMap(CStr(catId))
+            Set inner = maintMap(lookupKey)
 
 
 
@@ -930,13 +1025,13 @@ Public Sub ImportMaintenanceStatus(ws As Worksheet, maintStatus As Object)
 
                     cond = CStr(status("condition"))
 
-                    If (cond = "good" Or cond = "no_issue") And inner.Exists("good") Then
+                    If cond = "good" And inner.Exists("good") Then
 
                         SetCellValueSafe ws, inner("good"), ChrW(&H25A0)
 
-                    ElseIf cond = "defect_found" And inner.Exists("defect") Then
+                    ElseIf cond = "no_issue" And inner.Exists("no_issue") Then
 
-                        SetCellValueSafe ws, inner("defect"), ChrW(&H25A0)
+                        SetCellValueSafe ws, inner("no_issue"), ChrW(&H25A0)
 
                     End If
 
@@ -1013,6 +1108,18 @@ Public Sub ImportCategorySurveyStatus(ws As Worksheet, catSurvey As Object)
 
     Next catId
 
+
+    ' categorySurveyStatusが空の場合、全てデフォルト「調査実施」にチェック
+    Dim mapKey As Variant
+    For Each mapKey In catMap.Keys
+        If Not catSurvey.Exists(CStr(mapKey)) Then
+            Dim defInner As Object
+            Set defInner = catMap(CStr(mapKey))
+            If defInner.Exists("conducted") Then
+                SetCellValueSafe ws, defInner("conducted"), ChrW(&H25A0)
+            End If
+        End If
+    Next mapKey
 End Sub
 
 
@@ -1408,3 +1515,66 @@ Public Sub ImportRebarSchmidt(ws As Worksheet, evaluations As Object)
         End If
     End If
 End Sub
+
+
+'' ISO 8601形式を日本語形式に変換
+'' "2026-03-27T09:19:44.442Z" → "2026年3月27日 9時19分"
+'' UTCをJST(+9h)に変換
+Public Function FormatIsoDateTime(isoStr As String) As String
+    On Error GoTo ErrHandler
+    If Len(isoStr) < 16 Then
+        FormatIsoDateTime = isoStr
+        Exit Function
+    End If
+
+    ' 日付部分と時刻部分を分割
+    Dim tPos As Long
+    tPos = InStr(isoStr, "T")
+    If tPos = 0 Then
+        FormatIsoDateTime = isoStr
+        Exit Function
+    End If
+
+    Dim datePart As String
+    datePart = Left(isoStr, tPos - 1)
+    Dim timePart As String
+    timePart = Mid(isoStr, tPos + 1)
+
+    ' 日付: "2026-03-27"
+    Dim parts() As String
+    parts = Split(datePart, "-")
+    If UBound(parts) < 2 Then
+        FormatIsoDateTime = isoStr
+        Exit Function
+    End If
+    Dim yr As Long
+    yr = CLng(parts(0))
+    Dim mo As Long
+    mo = CLng(parts(1))
+    Dim dy As Long
+    dy = CLng(parts(2))
+
+    ' 時刻: "09:19:44.442Z"
+    Dim tParts() As String
+    tParts = Split(Left(timePart, 5), ":")
+    If UBound(tParts) < 1 Then
+        FormatIsoDateTime = isoStr
+        Exit Function
+    End If
+    Dim hr As Long
+    hr = CLng(tParts(0))
+    Dim mn As Long
+    mn = CLng(tParts(1))
+
+    ' UTC→JST (+9h)
+    hr = hr + 9
+    If hr >= 24 Then
+        hr = hr - 24
+        dy = dy + 1
+    End If
+
+    FormatIsoDateTime = yr & "年" & mo & "月" & dy & "日 " & hr & "時" & mn & "分"
+    Exit Function
+ErrHandler:
+    FormatIsoDateTime = isoStr
+End Function

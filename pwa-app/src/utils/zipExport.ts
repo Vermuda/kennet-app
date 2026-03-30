@@ -190,6 +190,30 @@ function sanitizeFileName(name: string): string {
     .trim();
 }
 
+/**
+ * Escape non-ASCII characters to \uXXXX sequences.
+ * VBA-JSON (JsonConverter) cannot reliably parse multi-byte characters,
+ * so we convert them to Unicode escape sequences that VBA-JSON handles correctly.
+ */
+function escapeNonAscii(str: string): string {
+  let result = '';
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i);
+    if (code <= 0x7f) {
+      result += str[i];
+    } else if (code >= 0xd800 && code <= 0xdbff && i + 1 < str.length) {
+      // Surrogate pair
+      const low = str.charCodeAt(i + 1);
+      result += '\\u' + code.toString(16).padStart(4, '0');
+      result += '\\u' + low.toString(16).padStart(4, '0');
+      i++;
+    } else {
+      result += '\\u' + code.toString(16).padStart(4, '0');
+    }
+  }
+  return result;
+}
+
 // --- Main export types ---
 
 export interface ExportParams {
@@ -223,6 +247,8 @@ interface DefectExportEntry {
   positionX?: number;
   positionY?: number;
   blueprintId?: string;
+  categoryName?: string;
+  itemName?: string;
 }
 
 interface BlueprintExportEntry {
@@ -375,7 +401,9 @@ export async function exportAsZip(params: ExportParams): Promise<void> {
   }
 
   // --- 4. Build data.json ---
-  const defectEntries: DefectExportEntry[] = defects.map((d) => ({
+  // blueprintIdがないdefect（デバッグ生成等）はエクスポートから除外
+  const validDefects = defects.filter((d) => d.blueprintId);
+  const defectEntries: DefectExportEntry[] = validDefects.map((d) => ({
     id: d.id,
     inspectionId: d.inspectionId,
     location: d.location,
@@ -390,6 +418,8 @@ export async function exportAsZip(params: ExportParams): Promise<void> {
     positionX: d.positionX,
     positionY: d.positionY,
     blueprintId: d.blueprintId,
+    categoryName: d.inspectionItemId ? getCategoryLabel(d.inspectionItemId) : undefined,
+    itemName: d.inspectionItemId ? getItemName(d.inspectionItemId) : undefined,
   }));
 
   const dataJson = {
@@ -414,7 +444,9 @@ export async function exportAsZip(params: ExportParams): Promise<void> {
     standardPhotos: standardPhotoEntries,
   };
 
-  root.file('data.json', JSON.stringify(dataJson, null, 2));
+  // VBA-JSON (JsonConverter) が日本語等のマルチバイト文字でパースエラーを起こすため、
+  // 非ASCII文字を \uXXXX エスケープして出力する
+  root.file('data.json', escapeNonAscii(JSON.stringify(dataJson, null, 2)));
 
   // --- 5. Generate and download ZIP ---
   const zipBlob = await zip.generateAsync({ type: 'blob' });

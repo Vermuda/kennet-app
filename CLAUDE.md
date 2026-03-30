@@ -101,13 +101,19 @@ pwa-app/
 
 ### VBAファイル編集時の注意
 - **エンコーディング**: 必ずCP932（Shift-JIS）で読み書き
-- **改行コード**: 全ファイル CRLF（`\r\n`）で統一。~~ダブルCR(`\r\r\n`)は廃止~~（VBAエディタのインポートで空行挿入・行継続エラーの原因になるため）
+- **改行コード**: **全.basファイル**（JsonConverter.bas含む）CRLF（`\r\n`）で統一。LFのみだとVBAエディタのインポートで**パーサー動作不良**等の致命的バグの原因になる
 - **Python経由での編集推奨**: テキストエディタではなくPythonスクリプトでCP932を正しく扱う
 - **行継続 `_` の後に空行を入れない**: VBAコンパイルエラーの原因になる。Pythonで編集後は `_\r\n\r\n` パターンがないことを必ず検証すること
 - **関数の重複チェック必須**: VBAモジュール分割・編集後は必ず全モジュール横断でPublic関数名の重複がないか確認すること（VBAは同名Public関数が複数モジュールにあると「あいまいな名前」コンパイルエラーになる）
 - **Dim宣言の重複禁止**: 同一Sub/Function内で同名のDim宣言があるとコンパイルエラー。既存の宣言を確認してから追加すること
 - **Sub/Functionのネスト禁止**: VBAではSub/Function内に別のSub/Functionを定義できない。End Subの後に新しいSubを定義すること
 - **パターンマッチは関数名含めて確実に**: 置換時はSetupTableC→SetupTableA破壊事故の教訓あり
+
+### VBA-JSON (JsonConverter) の制約
+- **日本語等の非ASCII文字はパースエラーの原因**: VBA-JSON v2.3.1はマルチバイト文字を含むJSONで `Expecting ':'` エラーを起こす。**data.jsonの出力時に非ASCII文字を `\uXXXX` エスケープする**（zipExport.tsの`escapeNonAscii()`）
+- **JSONオブジェクトのキーは必ず英字**: 日本語キー（例: `"備考": "..."` ）はパースエラーの直接原因。英字キー（例: `"remarks_general"` ）を使用すること
+- **ADODB.StreamのBOM問題**: `Charset="UTF-8"` で読み込むとBOM（U+FEFF）が文字列先頭に残る場合がある。ReadUtf8File後に `AscW(Left(jsonText, 1)) = &HFEFF` でBOM検出・除去すること
+- **VBA-JSONの `\uXXXX` デコード**: JsonConverterは `\uXXXX` を `ChrW()` で正しく復元できる（json_ParseString内で実装済み）ため、エスケープ出力との相性は良い
 
 ### Mac版Excel対応の注意
 - **ファイルパス**: Mac VBAの`Open`ステートメントはMac形式パス（コロン区切り: `Macintosh HD:Users:...`）が必要。POSIXパス（`/Users/...`）は`Open`で使えない

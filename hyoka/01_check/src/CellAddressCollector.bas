@@ -23,6 +23,7 @@ Attribute VB_Name = "CellAddressCollector"
 Option Explicit
 
 Private Const MAPPING_SHEET As String = "マッピング"
+Public Const KP_MAPPING_SHEET As String = "KPマッピング"
 Private Const SHEET_PW As String = "2025Ken0129ken"
 
 '' 収集モード状態
@@ -722,8 +723,9 @@ Private Sub SetupTableK(ws As Worksheet)
     ws.Range("BD2").Value = "評価セル(左)"
     ws.Range("BE2").Value = "補修方法セル(左)"
     ws.Range("BF2").Value = "画像セル(左)"
-    ws.Range("AY2:BF2").Font.Bold = True
-    ws.Range("AY2:BF2").Interior.Color = RGB(244, 199, 195)
+    ws.Range("BG2").Value = "カテゴリ名セル(左)"
+    ws.Range("AY2:BG2").Font.Bold = True
+    ws.Range("AY2:BG2").Interior.Color = RGB(244, 199, 195)
 
     Dim r As Long
     Dim c As Long
@@ -731,7 +733,7 @@ Private Sub SetupTableK(ws As Worksheet)
     r = 3
     ws.Cells(r, 51).Value = "tmpl_c"
     ws.Cells(r, 52).Value = "評価c劣化事象"
-    For c = 53 To 58
+    For c = 53 To 59
         ws.Cells(r, c).Interior.Color = RGB(255, 255, 200)
     Next c
 
@@ -739,10 +741,52 @@ Private Sub SetupTableK(ws As Worksheet)
     r = 4
     ws.Cells(r, 51).Value = "tmpl_b2"
     ws.Cells(r, 52).Value = "評価b2劣化事象"
-    For c = 53 To 58
+    For c = 53 To 59
         If c <> 57 Then ws.Cells(r, c).Interior.Color = RGB(255, 255, 200)
     Next c
 End Sub
+
+Private Sub SetupTableL(ws As Worksheet)
+    ws.Range("BH1").Value = "【テーブルL】キープランテンプレート"
+    ws.Range("BH1").Font.Bold = True
+    ws.Range("BH1").Interior.Color = RGB(128, 0, 128)
+    ws.Range("BH1").Font.Color = RGB(255, 255, 255)
+
+    ws.Range("BH2").Value = "templateKey"
+    ws.Range("BI2").Value = "シート名"
+    ws.Range("BJ2").Value = "フロア名セル"
+    ws.Range("BK2").Value = "図面画像セル"
+    ws.Range("BL2").Value = "事象1_場所セル"
+    ws.Range("BM2").Value = "事象1_部位セル"
+    ws.Range("BN2").Value = "事象1_劣化状況セル"
+    ws.Range("BO2").Value = "事象1_評価セル"
+    ws.Range("BP2").Value = "事象1_補修方法セル"
+    ws.Range("BQ2").Value = "事象1_画像セル"
+    ws.Range("BR2").Value = "事象2_場所セル"
+    ws.Range("BH2:BR2").Font.Bold = True
+    ws.Range("BH2:BR2").Interior.Color = RGB(230, 210, 230)
+
+    Dim r As Long
+    Dim c As Long
+    ' kp_c: 評価c写真キープラン
+    r = 3
+    ws.Cells(r, 60).Value = "kp_c"
+    ws.Cells(r, 61).Value = "評価「ｃ」　写真キープラン"
+    ' BJ-BR列を黄色（収集対象）
+    For c = 62 To 70
+        ws.Cells(r, c).Interior.Color = RGB(255, 255, 200)
+    Next c
+
+    ' kp_b2: 評価b2写真キープラン
+    r = 4
+    ws.Cells(r, 60).Value = "kp_b2"
+    ws.Cells(r, 61).Value = "評価「ｂ２」　写真キープラン"
+    ' BJ-BR列を黄色（収集対象）、BP列(補修方法)はb2対象外
+    For c = 62 To 70
+        If c <> 68 Then ws.Cells(r, c).Interior.Color = RGB(255, 255, 200)
+    Next c
+End Sub
+
 
 '' =============================================
 '' Step 2: セルアドレスの対話的収集
@@ -1173,9 +1217,9 @@ NextBuildGroup:
         Dim tmplName As String
         tmplName = mapWs.Cells(r, 52).Value
         Dim tmplLabels As Variant
-        tmplLabels = Array("", "", "", "場所セル", "部位セル", "劣化状況セル", "評価セル", "補修方法セル", "画像セル")
+        tmplLabels = Array("", "", "", "場所セル", "部位セル", "劣化状況セル", "評価セル", "補修方法セル", "画像セル", "カテゴリ名セル")
         Dim tc As Long
-        For tc = 53 To 58
+        For tc = 53 To 59
             ' tmpl_b2の補修方法セル(col57)は対象外
             If CStr(mapWs.Cells(r, 51).Value) = "tmpl_b2" And tc = 57 Then GoTo NextTC
             If mapWs.Cells(r, tc).Value = "" Then
@@ -1188,6 +1232,168 @@ NextBuildGroup:
     Loop
 
 End Sub
+
+'' =============================================
+'' キープラン専用マッピングシート
+'' =============================================
+
+
+'' キープラン専用マッピングシートを作成
+Public Sub CreateKeyPlanMappingSheet()
+    Application.ScreenUpdating = False
+    
+    ' 既存シートがあれば削除
+    On Error Resume Next
+    Dim oldWs As Worksheet
+    Set oldWs = Worksheets(KP_MAPPING_SHEET)
+    If Not oldWs Is Nothing Then
+        Application.DisplayAlerts = False
+        oldWs.Delete
+        Application.DisplayAlerts = True
+    End If
+    On Error GoTo 0
+    
+    Dim ws As Worksheet
+    Set ws = Worksheets.Add(After:=Worksheets(Worksheets.Count))
+    ws.Name = KP_MAPPING_SHEET
+    
+    ' ヘッダー
+    ws.Range("A1").Value = "【テーブルL】キープランテンプレート"
+    ws.Range("A1").Font.Bold = True
+    ws.Range("A1").Interior.Color = RGB(128, 0, 128)
+    ws.Range("A1").Font.Color = RGB(255, 255, 255)
+    
+    ws.Range("A2").Value = "templateKey"
+    ws.Range("B2").Value = "シート名"
+    ws.Range("C2").Value = "フロア名セル"
+    ws.Range("D2").Value = "図面画像セル"
+    ws.Range("E2").Value = "事象1_カテゴリ名セル"
+    ws.Range("F2").Value = "事象1_場所セル"
+    ws.Range("G2").Value = "事象1_部位セル"
+    ws.Range("H2").Value = "事象1_劣化状況セル"
+    ws.Range("I2").Value = "事象1_評価セル"
+    ws.Range("J2").Value = "事象1_補修方法セル"
+    ws.Range("K2").Value = "事象1_画像セル"
+    ws.Range("L2").Value = "事象2_カテゴリ名セル"
+    ws.Range("A2:L2").Font.Bold = True
+    ws.Range("A2:L2").Interior.Color = RGB(230, 210, 230)
+    
+    ' kp_c
+    ws.Cells(3, 1).Value = "kp_c"
+    ws.Cells(3, 2).Value = "評価「ｃ」　写真キープラン"
+    Dim c As Long
+    For c = 3 To 12
+        ws.Cells(3, c).Interior.Color = RGB(255, 255, 200)
+    Next c
+    
+    ' kp_b2
+    ws.Cells(4, 1).Value = "kp_b2"
+    ws.Cells(4, 2).Value = "評価「ｂ２」　写真キープラン"
+    For c = 3 To 12
+        If c <> 10 Then ws.Cells(4, c).Interior.Color = RGB(255, 255, 200)
+    Next c
+    
+    ' 列幅調整
+    ws.Columns("A:A").ColumnWidth = 10
+    ws.Columns("B:B").ColumnWidth = 25
+    ws.Columns("C:L").ColumnWidth = 18
+    
+    Application.ScreenUpdating = True
+    MsgBox "キープランマッピングシートを作成しました！" & vbCrLf & vbCrLf & _
+           "次に CollectKeyPlanAddresses を実行してセルアドレスを収集してください。", _
+           vbInformation, "KPマッピングシート作成"
+End Sub
+
+
+'' キープランセルアドレスの収集
+Public Sub CollectKeyPlanAddresses()
+    Dim mapWs As Worksheet
+    On Error Resume Next
+    Set mapWs = Worksheets(KP_MAPPING_SHEET)
+    On Error GoTo 0
+    If mapWs Is Nothing Then
+        MsgBox "先に CreateKeyPlanMappingSheet を実行してください。", vbCritical
+        Exit Sub
+    End If
+    
+    ' 収集対象をリストアップ
+    Set g_CollectItems = New Collection
+    
+    Dim r As Long
+    r = 3
+    Do While mapWs.Cells(r, 1).Value <> ""
+        Dim tmplName As String
+        tmplName = mapWs.Cells(r, 2).Value
+        Dim labels As Variant
+        labels = Array("", "", "フロア名セル", "図面画像セル", "事象1_カテゴリ名セル", "事象1_場所セル", "事象1_部位セル", "事象1_劣化状況セル", "事象1_評価セル", "事象1_補修方法セル", "事象1_画像セル", "事象2_カテゴリ名セル")
+        Dim kc As Long
+        For kc = 3 To 12
+            ' kp_b2の補修方法セル(col10)は対象外
+            If CStr(mapWs.Cells(r, 1).Value) = "kp_b2" And kc = 10 Then GoTo NextKPCol2
+            If mapWs.Cells(r, kc).Value = "" Then
+                g_CollectItems.Add Array(KP_MAPPING_SHEET, r, kc, _
+                    "【KP/" & labels(kc - 1) & "】" & tmplName & " ※該当シートでクリック")
+            End If
+NextKPCol2:
+        Next kc
+        r = r + 1
+    Loop
+    
+    If g_CollectItems.Count = 0 Then
+        MsgBox "収集対象のセルがありません。全て入力済みです。", vbInformation
+        Exit Sub
+    End If
+    
+    MsgBox "キープランセルの収集を開始します。" & vbCrLf & vbCrLf & _
+           "対象: " & g_CollectItems.Count & "件" & vbCrLf & vbCrLf & _
+           "手順:" & vbCrLf & _
+           "1. キープランテンプレートシートに切り替え" & vbCrLf & _
+           "2. ステータスバーの指示を読む" & vbCrLf & _
+           "3. 該当セルをクリック" & vbCrLf & _
+           "4. 確認ダイアログで「はい」", _
+           vbInformation, "KPセルアドレス収集"
+    
+    g_CollectMode = True
+    g_CollectIndex = 1
+    ShowCurrentPrompt
+End Sub
+
+'' KPマッピングシートをテキストファイルにエクスポート
+Public Sub ExportKeyPlanMappingSheet()
+    Dim mapWs As Worksheet
+    On Error Resume Next
+    Set mapWs = Worksheets(KP_MAPPING_SHEET)
+    On Error GoTo 0
+    If mapWs Is Nothing Then
+        MsgBox "KPマッピングシートが見つかりません。", vbCritical
+        Exit Sub
+    End If
+    
+    Dim filePath As String
+    filePath = ThisWorkbook.Path & "/kp_mapping_export.txt"
+    
+    Dim fn As Integer
+    fn = FreeFile
+    Open filePath For Output As #fn
+    
+    ' ヘッダー行
+    Dim r As Long
+    Dim c As Long
+    Dim line As String
+    For r = 1 To 4
+        line = ""
+        For c = 1 To 12
+            If c > 1 Then line = line & vbTab
+            line = line & CStr(mapWs.Cells(r, c).Value)
+        Next c
+        Print #fn, line
+    Next r
+    
+    Close #fn
+    MsgBox "エクスポート完了: " & filePath, vbInformation
+End Sub
+
+
 
 '' =============================================
 '' セル選択時のハンドラ（ThisWorkbookから呼ぶ）
@@ -1228,7 +1434,7 @@ Public Sub OnCellSelected(ByVal Target As Range)
 
     ' マッピングシート参照
     Dim mapWs As Worksheet
-    Set mapWs = Worksheets(MAPPING_SHEET)
+    Set mapWs = Worksheets(item(0))
 
     Select Case Trim(answer)
         Case "1"
@@ -1476,6 +1682,7 @@ Public Sub ValidateMappingSheet()
         Next kc
         r = r + 1
     Loop
+
     details = details & "テーブルK(不具合テンプレート): " & (emptyCount - prevCount) & "件空欄" & vbCrLf
 
     If emptyCount = 0 Then

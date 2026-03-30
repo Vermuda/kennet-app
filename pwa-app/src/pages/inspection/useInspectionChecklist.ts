@@ -607,13 +607,15 @@ export function useInspectionChecklist(propertyId: string | undefined): UseInspe
       const catInfo = inspectionMaster.find(c => c.items.some(i => i.id === modalItemId));
       const catName = catInfo?.shortName || catInfo?.name || '';
       const entry = `【${catName}】-【${itemInfo.item.name}】\n${remarkText.trim()}`;
-      const currentRemarks = (newData.options?.['remarks']?.['備考'] as string) || '';
+      // データ保存キーはVBAマッピングの'remarks_general'に合わせる（日本語キーはVBA-JSONパースエラーの原因）
+      const remarksObj = newData.options?.['remarks'] || {};
+      const currentRemarks = (remarksObj['remarks_general'] as string) || (remarksObj['備考'] as string) || '';
       const updatedRemarks = currentRemarks ? `${currentRemarks}\n\n${entry}` : entry;
       newData = {
         ...newData,
         options: {
           ...newData.options,
-          remarks: { ...(newData.options?.['remarks'] || {}), '備考': updatedRemarks },
+          remarks: { ...(newData.options?.['remarks'] || {}), 'remarks_general': updatedRemarks },
         },
       };
     }
@@ -651,12 +653,35 @@ export function useInspectionChecklist(propertyId: string | undefined): UseInspe
       // 撮影フローでない場合: 即座にIndexedDBに保存
       setInspectionData(newData);
       saveInspectionData(newData);
-      closeModal();
 
-      if (isEditing) {
-        toast('評価を更新しました');
+      if (isEditing && isDefect) {
+        // b2/c編集でテキストのみ更新: 不具合編集画面に遷移
+        // closeModalの前にnavigateを実行する（closeModal後の再レンダリングでnavigateが無効化されるため）
+        const itemIdForScroll = modalItemId;
+        closeModal();
+        const findAndNavigateToDefect = async () => {
+          const appData = await loadData();
+          const defect = appData.defects.find(d => d.evaluationId === evalId);
+          if (defect) {
+            const returnWithScroll = `/properties/${propertyId}/inspection-checklist?scrollTo=${itemIdForScroll}`;
+            navigate(`/defect/edit/${defect.id}`, {
+              state: {
+                blueprintId: defect.blueprintId,
+                returnPath: returnWithScroll,
+              },
+            });
+          } else {
+            toast('評価を更新しました');
+          }
+        };
+        findAndNavigateToDefect();
       } else {
-        toast('評価を追加しました');
+        closeModal();
+        if (isEditing) {
+          toast('評価を更新しました');
+        } else {
+          toast('評価を追加しました');
+        }
       }
     }
   };

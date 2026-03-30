@@ -1,624 +1,419 @@
 Attribute VB_Name = "DataImportKeyPlan"
-
 '' =============================================
 '' DataImportKeyPlan - キープランシート作成
+'' マッピングベースのデータ書き込み
 '' =============================================
 
 Option Explicit
 
+'' 定数
+Public Const KP_MAX_DEFECTS As Long = 8
+Public Const KP_ROW_INTERVAL As Long = 14
+Public Const KP_COL_OFFSET As Long = 26
+
+'' テンプレートシート名（全角文字）
+Public Const KP_TEMPLATE_C As String = "評価「c」写真キープラン"
+Public Const KP_TEMPLATE_B2 As String = "評価「b2」写真キープラン"
+
+'' 図面の最大サイズ
+Private Const BP_MAX_W As Double = 400
+Private Const BP_MAX_H As Double = 350
+Private Const PIN_SIZE As Double = 16
+Private Const THUMBNAIL_W As Double = 80
+Private Const THUMBNAIL_H As Double = 60
+
 '' =============================================
-'' キープランシートの作成
-'' 図面に不具合マーカーとサムネイルを配置
+'' キープランシートの作成（評価タイプ別・フロア別・8件上限）
 '' =============================================
 
 Public Sub CreateKeyPlanSheets(jsonData As Object)
-
-    ' 必要なデータが存在するか確認
-
     If Not jsonData.Exists("floors") Or Not jsonData.Exists("blueprints") Then Exit Sub
-
     If Not jsonData.Exists("defects") Or Not jsonData.Exists("markers") Then Exit Sub
 
-
-
     Dim floors As Object
-
     Set floors = jsonData("floors")
-
-
-
     Dim blueprints As Object
-
     Set blueprints = jsonData("blueprints")
-
-
-
     Dim defectsAll As Object
-
     Set defectsAll = jsonData("defects")
-
-
-
     Dim markersAll As Object
-
     Set markersAll = jsonData("markers")
-
-
-
     If defectsAll.Count = 0 Then Exit Sub
 
-
-
-    ' マーカーマップ（markerId → marker object）
-
+    ' マーカーマップ
     Dim markerMap As Object
-
     Set markerMap = New Dictionary
-
     Dim i As Long
-
     For i = 1 To markersAll.Count
-
         Dim mkr As Object
-
         Set mkr = markersAll(i)
-
-        If mkr.Exists("id") Then
-
-            Set markerMap(mkr("id")) = mkr
-
-        End If
-
+        If mkr.Exists("id") Then Set markerMap(mkr("id")) = mkr
     Next i
-
-
-
-    ' 検査データマップ
 
     Dim inspectionMap As Object
+    Set inspectionMap = DataImportDefects.BuildInspectionMap(jsonData)
+    Dim markerBpMap As Object
+    Set markerBpMap = DataImportDefects.BuildMarkerBlueprintMap(jsonData)
+    Dim bpFloorMap As Object
+    Set bpFloorMap = DataImportDefects.BuildBlueprintFloorMap(jsonData)
 
-    Set inspectionMap = BuildInspectionMap(jsonData)
+    ' 評価タイプ別にループ
+    Dim evalTypes As Variant
+    evalTypes = Array("c", "b2")
+    Dim eIdx As Long
+    For eIdx = LBound(evalTypes) To UBound(evalTypes)
+        Dim evalType As String
+        evalType = evalTypes(eIdx)
+        Dim templateName As String
+        If evalType = "c" Then templateName = KP_TEMPLATE_C Else templateName = KP_TEMPLATE_B2
 
+        ' フロアごとにループ
+        Dim fi As Long
+        For fi = 1 To floors.Count
+            Dim floor As Object
+            Set floor = floors(fi)
+            Dim floorId As String
+            floorId = floor("id")
+            Dim floorName As String
+            floorName = floor("name")
 
+            Application.StatusBar = "キープラン作成中: " & evalType & " - " & floorName
 
-    ' 階層ごとにキープランシートを作成
-
-    For i = 1 To floors.Count
-
-        Dim floor As Object
-
-        Set floor = floors(i)
-
-
-
-        Dim floorId As String
-
-        floorId = floor("id")
-
-        Dim floorName As String
-
-        floorName = floor("name")
-
-
-
-        Application.StatusBar = "キープランシート作成中: " & floorName & "..."
-
-
-
-        ' この階層の図面を取得
-
-        Dim floorBlueprints As New Collection
-
-        Dim j As Long
-
-        For j = 1 To blueprints.Count
-
-            Dim bp As Object
-
-            Set bp = blueprints(j)
-
-            If bp.Exists("floorId") Then
-
-                If bp("floorId") = floorId Then
-
-                    floorBlueprints.Add bp
-
+            ' このフロアの図面を取得
+            Dim floorBps As New Collection
+            Dim bi As Long
+            For bi = 1 To blueprints.Count
+                Dim bp As Object
+                Set bp = blueprints(bi)
+                If bp.Exists("floorId") Then
+                    If bp("floorId") = floorId Then floorBps.Add bp
                 End If
+            Next bi
 
-            End If
-
-        Next j
-
-
-
-        ' この階層に不具合があるか確認
-
-        Dim floorDefects As New Collection
-
-        Dim markerBpMap As Object
-
-        Set markerBpMap = BuildMarkerBlueprintMap(jsonData)
-
-
-
-        Dim bpFloorMap As Object
-
-        Set bpFloorMap = BuildBlueprintFloorMap(jsonData)
-
-
-
-        Dim k As Long
-
-        For k = 1 To defectsAll.Count
-
-            Dim def2 As Object
-
-            Set def2 = defectsAll(k)
-
-
-
-            Dim defFloorName As String
-
-            defFloorName = GetDefectFloorName(def2, markerBpMap, bpFloorMap)
-
-
-
-            If defFloorName = floorName Then
-
+            ' このフロア×評価タイプの不具合を取得
+            Dim floorDefects As New Collection
+            Dim di As Long
+            For di = 1 To defectsAll.Count
+                Dim def2 As Object
+                Set def2 = defectsAll(di)
+                Dim defFloor As String
+                defFloor = DataImportDefects.GetDefectFloorName(def2, markerBpMap, bpFloorMap)
+                If defFloor <> floorName Then GoTo NextDefectKP
+                Dim defEval As String
+                defEval = DataImportDefects.GetDefectEvaluation(def2, inspectionMap)
+                If defEval <> evalType Then GoTo NextDefectKP
                 floorDefects.Add def2
+NextDefectKP:
+            Next di
 
+            ' 不具合がある場合のみシート作成（8件ずつ分割）
+            If floorDefects.Count > 0 And floorBps.Count > 0 Then
+                Dim sheetsNeeded As Long
+                sheetsNeeded = -Int(-(floorDefects.Count / KP_MAX_DEFECTS))
+                Dim si As Long
+                For si = 1 To sheetsNeeded
+                    Dim batch As New Collection
+                    Dim batchStart As Long
+                    batchStart = (si - 1) * KP_MAX_DEFECTS + 1
+                    Dim batchEnd As Long
+                    If si * KP_MAX_DEFECTS < floorDefects.Count Then
+                        batchEnd = si * KP_MAX_DEFECTS
+                    Else
+                        batchEnd = floorDefects.Count
+                    End If
+                    Dim bdi As Long
+                    For bdi = batchStart To batchEnd
+                        batch.Add floorDefects(bdi)
+                    Next bdi
+
+                    Dim sheetName As String
+                    sheetName = templateName & "_" & floorName
+                    If sheetsNeeded > 1 Then sheetName = sheetName & "_" & si
+
+                    CreateSingleKeyPlanSheet templateName, sheetName, floorName, floorBps, batch, markerMap, inspectionMap, evalType
+                    Set batch = New Collection
+                Next si
             End If
 
-        Next k
-
-
-
-        ' 不具合がある階層のみシート作成
-
-        If floorDefects.Count > 0 And floorBlueprints.Count > 0 Then
-
-            CreateSingleKeyPlanSheet floorName, floorBlueprints, floorDefects, markerMap, inspectionMap
-
-        End If
-
-
-
-        Set floorBlueprints = New Collection
-
-        Set floorDefects = New Collection
-
-    Next i
-
+            Set floorBps = New Collection
+            Set floorDefects = New Collection
+        Next fi
+    Next eIdx
 End Sub
 
 
-
-'' 単一キープランシート作成
-
-
-Public Sub CreateSingleKeyPlanSheet(floorName As String, floorBlueprints As Collection, _
-                                      floorDefects As Collection, markerMap As Object, _
-                                      inspectionMap As Object)
-
-    Dim sheetName As String
-
-    sheetName = "キープラン_" & floorName
-
-
+'' 単一キープランシート作成（テンプレートコピー＋マッピングベース書込）
+Public Sub CreateSingleKeyPlanSheet(templateName As String, sheetName As String, _
+    floorName As String, floorBlueprints As Collection, _
+    defectBatch As Collection, markerMap As Object, _
+    inspectionMap As Object, evalType As String)
 
     ' 既存シートがあれば削除
-
     On Error Resume Next
-
     Dim existingSheet As Worksheet
-
     Set existingSheet = Worksheets(sheetName)
-
     If Not existingSheet Is Nothing Then
-
         Application.DisplayAlerts = False
-
         existingSheet.Delete
-
         Application.DisplayAlerts = True
-
     End If
-
     Set existingSheet = Nothing
-
     On Error GoTo 0
 
-
-
-    ' 新規シート作成
-
+    ' テンプレートシートをコピー
+    Dim tmplWs As Worksheet
+    On Error Resume Next
+    Set tmplWs = Worksheets(templateName)
+    On Error GoTo 0
+    If tmplWs Is Nothing Then
+        DataImport.m_ErrorLog.Add "テンプレートが見つかりません: " & templateName
+        Exit Sub
+    End If
+    tmplWs.Copy After:=Worksheets(Worksheets.Count)
     Dim ws As Worksheet
-
-    Set ws = Worksheets.Add(After:=Worksheets(Worksheets.Count))
-
+    Set ws = Worksheets(Worksheets.Count)
     ws.Name = sheetName
 
+    ' シート保護解除
+    On Error Resume Next
+    ws.Unprotect Password:=DataImport.SHEET_PW
+    On Error GoTo 0
 
+    ' フロア名を書き込み
+    DataImport.SetCellValueSafe ws, "AC1", floorName
 
-    ' タイトル
-
-    ws.Range("A1").Value = "キープラン - " & floorName
-
-    ws.Range("A1").Font.Size = 14
-
-    ws.Range("A1").Font.Bold = True
-
-
-
-    ' 図面ごとに配置
-
-    Dim currentTop As Double
-
-    currentTop = 40 ' タイトル下のオフセット
-
-
-
-    Dim bpIdx As Long
-
-    For bpIdx = 1 To floorBlueprints.Count
-
+    ' 図面画像を挿入（最初の図面を使用）
+    If floorBlueprints.Count > 0 Then
         Dim bp As Object
-
-        Set bp = floorBlueprints(bpIdx)
-
-
-
-        ' 図面画像の挿入
-
-        Dim bpShape As Shape
-
+        Set bp = floorBlueprints(1)
+        Dim bpImgPath As String
+        bpImgPath = ""
         If bp.Exists("imageFile") Then
-            imagePath = ResolveImagePath(CStr(bp("imageFile")))
+            bpImgPath = DataImport.ResolveImagePath(CStr(bp("imageFile")))
         ElseIf bp.Exists("imageData") Then
-
             If Not IsNull(bp("imageData")) And bp("imageData") <> "" Then
-
-                Dim bpImgPath As String
-
-                bpImgPath = DecodeBase64ToTempFile(CStr(bp("imageData")))
-
-
-
-                If bpImgPath <> "" Then
-
-                    Set bpShape = ws.Shapes.AddPicture( _
-                        Filename:=bpImgPath, _
-                        LinkToFile:=False, _
-                        SaveWithDocument:=True, _
-                        Left:=10, _
-                        Top:=currentTop, _
-                        Width:=-1, _
-                        Height:=-1)
-
-
-
-                    ' アスペクト比保持でリサイズ
-
-                    ScaleShapeToFit bpShape, BP_MAX_W, BP_MAX_H
-
-
-
-                    ' この図面に関連する不具合のピンとサムネイルを描画
-
-                    If bp.Exists("id") Then
-
-                        DrawPinsAndThumbnails ws, bpShape, CStr(bp("id")), _
-                            floorDefects, markerMap, inspectionMap
-
-                    End If
-
-
-
-                    ' 次の図面の配置位置
-
-                    currentTop = bpShape.Top + bpShape.Height + 30
-
-                End If
-
+                bpImgPath = DataImport.DecodeBase64ToTempFile(CStr(bp("imageData")))
             End If
-
         End If
-
-    Next bpIdx
-
-End Sub
-
-
-
-'' 図形をアスペクト比保持でリサイズ
-
-
-Public Sub ScaleShapeToFit(shp As Shape, maxWidth As Double, maxHeight As Double)
-
-    Dim ratio As Double
-
-
-
-    If shp.Width > maxWidth Or shp.Height > maxHeight Then
-
-        Dim wRatio As Double
-
-        wRatio = maxWidth / shp.Width
-
-        Dim hRatio As Double
-
-        hRatio = maxHeight / shp.Height
-
-
-
-        ratio = Application.WorksheetFunction.Min(wRatio, hRatio)
-
-
-
-        shp.LockAspectRatio = msoTrue
-
-        shp.Width = shp.Width * ratio
-
+        If bpImgPath <> "" Then
+            Dim bpShapeName As String
+            bpShapeName = InsertImageKeepAspect(ws, bpImgPath, "M10")
+        End If
     End If
 
-End Sub
-
-
-
-'' ピンマーカーとサムネイルの描画
-
-
-Public Sub DrawPinsAndThumbnails(ws As Worksheet, bpShape As Shape, blueprintId As String, _
-                                   defectList As Collection, markerMap As Object, _
-                                   inspectionMap As Object)
-
-    On Error GoTo ErrHandler
-
-
-
-    ' サムネイル配置の開始位置（図面の右側）
-
-    Dim thumbLeft As Double
-
-    thumbLeft = bpShape.Left + bpShape.Width + 20
-
-
-
-    Dim thumbTop As Double
-
-    thumbTop = bpShape.Top
-
-
-
-    Dim defectNum As Long
-
-    defectNum = 0
-
-
-
-    Dim i As Long
-
-    For i = 1 To defectList.Count
-
+    ' 各不具合の情報を書き込み
+    Dim dIdx As Long
+    For dIdx = 1 To defectBatch.Count
         Dim defect As Object
+        Set defect = defectBatch(dIdx)
 
-        Set defect = defectList(i)
+        Dim zeroIdx As Long
+        zeroIdx = dIdx - 1
+        Dim pairIdx As Long
+        pairIdx = zeroIdx \ 2
+        Dim side As Long
+        side = zeroIdx Mod 2
+        Dim rowOfs As Long
+        rowOfs = pairIdx * KP_ROW_INTERVAL
+        Dim colOfs As Long
+        colOfs = side * KP_COL_OFFSET
 
+        ' カテゴリ名
+        Dim catName As String
+        catName = ""
+        If defect.Exists("categoryName") Then catName = CStr(defect("categoryName"))
+        DataImport.SetCellValueSafe ws, CellAddr(10 + rowOfs, 3 + colOfs), catName
 
+        ' 場所
+        Dim locVal As String
+        locVal = ""
+        If defect.Exists("location") Then locVal = CStr(defect("location"))
+        DataImport.SetCellValueSafe ws, CellAddr(10 + rowOfs, 7 + colOfs), locVal
 
-        ' この図面に属する不具合かチェック
+        ' 部位
+        Dim compVal As String
+        compVal = ""
+        If defect.Exists("component") Then compVal = CStr(defect("component"))
+        DataImport.SetCellValueSafe ws, CellAddr(10 + rowOfs, 10 + colOfs), compVal
 
-        If Not defect.Exists("markerId") Then GoTo NextDefect
+        ' 劣化状況
+        Dim deterVal As String
+        deterVal = ""
+        If defect.Exists("deterioration") Then deterVal = CStr(defect("deterioration"))
+        DataImport.SetCellValueSafe ws, CellAddr(11 + rowOfs, 4 + colOfs), deterVal
 
-
-
-        Dim markerId As String
-
-        markerId = defect("markerId")
-
-
-
-        If Not markerMap.Exists(markerId) Then GoTo NextDefect
-
-
-
-        Dim marker As Object
-
-        Set marker = markerMap(markerId)
-
-
-
-        If Not marker.Exists("blueprintId") Then GoTo NextDefect
-
-        If marker("blueprintId") <> blueprintId Then GoTo NextDefect
-
-
-
-        defectNum = defectNum + 1
-
-
-
-        ' マーカー座標（パーセンテージ → ピクセル位置）
-
-        Dim markerX As Double
-
-        Dim markerY As Double
-
-
-
-        If marker.Exists("x") Then markerX = CDbl(marker("x")) Else markerX = 50
-
-        If marker.Exists("y") Then markerY = CDbl(marker("y")) Else markerY = 50
-
-
-
-        Dim pinLeft As Double
-
-        pinLeft = bpShape.Left + (markerX / 100) * bpShape.Width - PIN_SIZE / 2
-
-
-
-        Dim pinTop As Double
-
-        pinTop = bpShape.Top + (markerY / 100) * bpShape.Height - PIN_SIZE / 2
-
-
-
-        ' 評価値でピン色を決定
-
-        Dim evalValue As String
-
-        evalValue = GetDefectEvaluation(defect, inspectionMap)
-
-
-
-        Dim pinColor As Long
-
-        If evalValue = "c" Then
-
-            pinColor = RGB(239, 68, 68)   ' 赤 #EF4444
-
+        ' 評価
+        Dim evalVal As String
+        evalVal = ""
+        If defect.Exists("evaluationType") Then evalVal = CStr(defect("evaluationType"))
+        Dim evalCol As Long
+        If colOfs = 0 Then
+            evalCol = 11
         Else
+            evalCol = 10 + colOfs
+        End If
+        DataImport.SetCellValueSafe ws, CellAddr(11 + rowOfs, evalCol), evalVal
 
-            pinColor = RGB(59, 130, 246)  ' 青 #3B82F6
-
+        ' 補修方法（cのみ）
+        If evalType = "c" Then
+            Dim repairVal As String
+            repairVal = ""
+            If defect.Exists("repairMethod") Then repairVal = CStr(defect("repairMethod"))
+            DataImport.SetCellValueSafe ws, CellAddr(12 + rowOfs, 7 + colOfs), repairVal
         End If
 
-
-
-        ' ピンマーカー（円形）
-
-        Dim pinShape As Shape
-
-        Set pinShape = ws.Shapes.AddShape(msoShapeOval, pinLeft, pinTop, PIN_SIZE, PIN_SIZE)
-
-        pinShape.Fill.ForeColor.RGB = pinColor
-
-        pinShape.Line.ForeColor.RGB = RGB(255, 255, 255)
-
-        pinShape.Line.Weight = 1.5
-
-
-
-        ' 番号ラベル（ピン上）
-
-        pinShape.TextFrame.Characters.Text = CStr(defectNum)
-
-        pinShape.TextFrame.Characters.Font.Size = 8
-
-        pinShape.TextFrame.Characters.Font.Color = RGB(255, 255, 255)
-
-        pinShape.TextFrame.Characters.Font.Bold = True
-
-        pinShape.TextFrame.HorizontalAlignment = xlHAlignCenter
-
-        pinShape.TextFrame.VerticalAlignment = xlVAlignCenter
-
-
-
-        ' サムネイル画像
-        Dim thumbPath As String
-        thumbPath = ""
+        ' 画像
+        Dim imgPath As String
+        imgPath = ""
         If defect.Exists("imageFile") Then
-            thumbPath = ResolveImagePath(CStr(defect("imageFile")))
+            imgPath = DataImport.ResolveImagePath(CStr(defect("imageFile")))
         ElseIf defect.Exists("imageData") Then
             If Not IsNull(defect("imageData")) And defect("imageData") <> "" Then
-                thumbPath = DecodeBase64ToTempFile(CStr(defect("imageData")))
-
-
-
-                If thumbPath <> "" Then
-
-                    Dim thumbShape As Shape
-
-                    Set thumbShape = ws.Shapes.AddPicture( _
-                        Filename:=thumbPath, _
-                        LinkToFile:=False, _
-                        SaveWithDocument:=True, _
-                        Left:=thumbLeft, _
-                        Top:=thumbTop, _
-                        Width:=THUMBNAIL_W, _
-                        Height:=THUMBNAIL_H)
-
-
-
-                    ' 番号ラベル（サムネイル横）
-
-                    Dim lblShape As Shape
-
-                    Set lblShape = ws.Shapes.AddTextbox(msoTextOrientationHorizontal, _
-                        thumbLeft + THUMBNAIL_W + 5, thumbTop + THUMBNAIL_H / 2 - 8, 30, 16)
-
-                    lblShape.TextFrame.Characters.Text = CStr(defectNum)
-
-                    lblShape.TextFrame.Characters.Font.Size = 10
-
-                    lblShape.TextFrame.Characters.Font.Bold = True
-
-                    lblShape.Fill.Visible = msoFalse
-
-                    lblShape.Line.Visible = msoFalse
-
-
-
-                    ' 矢印線（ピン中心 → サムネイル左端中央）
-
-                    Dim arrowShape As Shape
-
-                    Set arrowShape = ws.Shapes.AddConnector(msoConnectorStraight, _
-                        pinLeft + PIN_SIZE / 2, pinTop + PIN_SIZE / 2, _
-                        thumbLeft, thumbTop + THUMBNAIL_H / 2)
-
-
-
-                    arrowShape.Line.ForeColor.RGB = pinColor
-
-                    arrowShape.Line.Weight = 1
-
-                    arrowShape.Line.EndArrowheadStyle = msoArrowheadTriangle
-
-                    arrowShape.Line.EndArrowheadLength = msoArrowheadShort
-
-                    arrowShape.Line.EndArrowheadWidth = msoArrowheadNarrow
-
-
-
-                    ' 次のサムネイルの位置
-
-                    thumbTop = thumbTop + THUMBNAIL_H + 10
-
-                End If
-
+                imgPath = DataImport.DecodeBase64ToTempFile(CStr(defect("imageData")))
             End If
-
         End If
+        If imgPath <> "" Then
+            Dim imgRow As Long
+            If evalType = "c" Then
+                imgRow = 14 + rowOfs
+            Else
+                imgRow = 12 + rowOfs
+            End If
+            DataImportDefects.InsertImageToCell ws, imgPath, CellAddr(imgRow, 2 + colOfs)
+        End If
+    Next dIdx
 
+    ' ===== 矢印描画 =====
+    ' 図面画像のShapeを名前で取得
+    Dim bpShape As Shape
+    Set bpShape = Nothing
+    If bpShapeName <> "" Then
+        On Error Resume Next
+        Set bpShape = ws.Shapes(bpShapeName)
+        On Error GoTo 0
+    End If
 
+    If Not bpShape Is Nothing Then
+        Dim dIdx2 As Long
+        For dIdx2 = 1 To defectBatch.Count
+            Dim def2 As Object
+            Set def2 = defectBatch(dIdx2)
+            ' ピン座標を取得（0-100%の相対座標）
+            Dim posX As Double
+            Dim posY As Double
+            posX = 50: posY = 50
+            If def2.Exists("positionX") Then posX = CDbl(def2("positionX"))
+            If def2.Exists("positionY") Then posY = CDbl(def2("positionY"))
 
-NextDefect:
+            ' ピン位置を図面上の絶対座標に変換
+            Dim pinX As Double
+            Dim pinY As Double
+            pinX = bpShape.Left + (posX / 100) * bpShape.Width
+            pinY = bpShape.Top + (posY / 100) * bpShape.Height
 
-    Next i
+            ' 事象サムネイル画像の位置を計算
+            Dim zi2 As Long
+            zi2 = dIdx2 - 1
+            Dim pi2 As Long
+            pi2 = zi2 \ 2
+            Dim si2 As Long
+            si2 = zi2 Mod 2
+            Dim ro2 As Long
+            ro2 = pi2 * KP_ROW_INTERVAL
+            Dim co2 As Long
+            co2 = si2 * KP_COL_OFFSET
+            Dim thumbRow As Long
+            If evalType = "c" Then
+                thumbRow = 14 + ro2
+            Else
+                thumbRow = 12 + ro2
+            End If
+            Dim thumbCell As Range
+            Set thumbCell = ws.Range(CellAddr(thumbRow, 2 + co2))
+            Dim thumbCenterX As Double
+            Dim thumbCenterY As Double
+            Dim thumbMerge As Range
+            Set thumbMerge = thumbCell.MergeArea
+            If si2 = 0 Then
+                ' 左列(1,3,5,7): 画像の右中央から
+                thumbCenterX = thumbMerge.Left + thumbMerge.Width
+            Else
+                ' 右列(2,4,6,8): 画像の左中央から
+                thumbCenterX = thumbMerge.Left
+            End If
+            thumbCenterY = thumbMerge.Top + thumbMerge.Height / 2
 
-
-
-    Exit Sub
-
-
-
-ErrHandler:
-
-    m_ErrorLog.Add "キープラン描画エラー: " & Err.Description
-
+            ' 矢印を描画
+            Dim lineShape As Shape
+            Set lineShape = ws.Shapes.AddLine(CSng(pinX), CSng(pinY), CSng(thumbCenterX), CSng(thumbCenterY))
+            With lineShape.Line
+                .ForeColor.RGB = RGB(255, 0, 0)
+                .Weight = 1.5
+                .BeginArrowheadStyle = msoArrowheadTriangle
+            End With
+        Next dIdx2
+    End If
 End Sub
 
 
+'' 行番号と列番号からセルアドレス文字列を生成
+Public Function CellAddr(rowNum As Long, colNum As Long) As String
+    CellAddr = Replace(Cells(rowNum, colNum).Address, "$", "")
+End Function
 
-'' =============================================
+'' 画像をアスペクト比保持で結合セル中央に配置
+Public Function InsertImageKeepAspect(ws As Worksheet, imagePath As String, cellAddr As String) As String
+    On Error Resume Next
+    Dim targetRange As Range
+    Set targetRange = ws.Range(cellAddr)
+    If targetRange Is Nothing Then Exit Function
 
-'' ユーティリティ: ボタン配置
+    ' 結合セルの範囲を取得
+    Dim mergeArea As Range
+    Set mergeArea = targetRange.MergeArea
 
-'' =============================================
+    Dim areaLeft As Double
+    Dim areaTop As Double
+    Dim areaWidth As Double
+    Dim areaHeight As Double
+    areaLeft = mergeArea.Left
+    areaTop = mergeArea.Top
+    areaWidth = mergeArea.Width
+    areaHeight = mergeArea.Height
+
+    ' 画像を挿入（元サイズで）
+    Dim pic As Shape
+    Set pic = ws.Shapes.AddPicture(imagePath, msoFalse, msoTrue, areaLeft, areaTop, -1, -1)
+    If pic Is Nothing Then
+        On Error GoTo 0
+        Exit Function
+    End If
+
+    ' アスペクト比を保持してフィット
+    pic.LockAspectRatio = msoTrue
+    Dim scaleW As Double
+    Dim scaleH As Double
+    scaleW = areaWidth / pic.Width
+    scaleH = areaHeight / pic.Height
+    Dim scaleFactor As Double
+    If scaleW < scaleH Then
+        scaleFactor = scaleW
+    Else
+        scaleFactor = scaleH
+    End If
+    pic.Width = pic.Width * scaleFactor
+
+    ' 中央配置
+    pic.Left = areaLeft + (areaWidth - pic.Width) / 2
+    pic.Top = areaTop + (areaHeight - pic.Height) / 2
+
+        pic.Name = "KP_Blueprint"
+    InsertImageKeepAspect = pic.Name
+
+    On Error GoTo 0
+End Function
 
 
 
-'' 現地調査シートに「JSONデータ取り込み」ボタンを配置
+
+

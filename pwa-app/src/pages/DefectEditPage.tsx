@@ -19,6 +19,7 @@ const DefectEditPage: React.FC = () => {
     blueprintId?: string;
     newImageData?: string;
     existingData?: ExistingFormData;
+    returnPath?: string;
   };
 
   // カメラから戻ってきた場合の処理
@@ -89,7 +90,11 @@ const DefectEditPage: React.FC = () => {
     );
 
     await updateData('defects', updatedDefects);
-    navigate(`/defects/${blueprintId}`);
+    if (state.returnPath) {
+      navigate(state.returnPath);
+    } else {
+      navigate(`/defects/${blueprintId}`);
+    }
   };
 
   const handleRetake = () => {
@@ -111,7 +116,11 @@ const DefectEditPage: React.FC = () => {
   };
 
   const handleCancel = () => {
-    navigate(`/defects/${blueprintId}`);
+    if (state.returnPath) {
+      navigate(state.returnPath);
+    } else {
+      navigate(`/defects/${blueprintId}`);
+    }
   };
 
   if (!initialDefect) {

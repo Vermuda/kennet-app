@@ -312,7 +312,7 @@ Public Function BuildInspectionMap(jsonData As Object) As Object
 
         If insp.Exists("id") Then
 
-            d(insp("id")) = insp
+            Set d(insp("id")) = insp
 
         End If
 
@@ -333,8 +333,15 @@ Public Function GetDefectFloorName(defect As Object, markerBpMap As Object, bpFl
 
     GetDefectFloorName = ""
 
+    ' 新形式: blueprintIdから直接フロア名を取得
+    If defect.Exists("blueprintId") Then
+        If bpFloorMap.Exists(CStr(defect("blueprintId"))) Then
+            GetDefectFloorName = bpFloorMap(CStr(defect("blueprintId")))
+            Exit Function
+        End If
+    End If
 
-
+    ' 旧形式: markerId経由でフロア名を取得
     If defect.Exists("markerId") Then
 
         Dim markerId As String
@@ -371,6 +378,13 @@ End Function
 Public Function GetDefectEvaluation(defect As Object, inspectionMap As Object) As String
 
     GetDefectEvaluation = ""
+
+    ' 新形式: evaluationTypeフィールドから直接取得
+    If defect.Exists("evaluationType") Then
+        GetDefectEvaluation = CStr(defect("evaluationType"))
+        Exit Function
+    End If
+
 
 
 
@@ -591,6 +605,8 @@ Public Sub InsertDefectsToSheet(ws As Worksheet, defectList As Collection, start
     Dim baseEvalRow As Long
     Dim baseRepairRow As Long
     Dim baseImgRow As Long
+    Dim baseCatNameCol As String
+    Dim baseCatNameRow As Long
 
     If tmplMap.Exists(tmplKey) Then
         Dim mapping As Object
@@ -614,6 +630,9 @@ Public Sub InsertDefectsToSheet(ws As Worksheet, defectList As Collection, start
         If mapping.Exists("image") Then
             ParseCellAddress CStr(mapping("image")), baseImgCol, baseImgRow
         End If
+        If mapping.Exists("categoryName") Then
+            ParseCellAddress CStr(mapping("categoryName")), baseCatNameCol, baseCatNameRow
+        End If
     End If
 
     ' フォールバック: マッピングが空の場合はハードコード値を使用
@@ -635,7 +654,9 @@ Public Sub InsertDefectsToSheet(ws As Worksheet, defectList As Collection, start
     rightDeteriorationCol = OffsetColumn(baseDeteriorationCol, 10) ' 例: B→L
     rightEvalCol = OffsetColumn(baseEvalCol, 10)            ' 例: J→T
     rightRepairCol = OffsetColumn(baseRepairCol, 10)
-    rightImgCol = OffsetColumn(baseImgCol, 10)              ' 例: B→L
+    rightImgCol = OffsetColumn(baseImgCol, 10)
+    Dim rightCatNameCol As String
+    If baseCatNameCol <> "" Then rightCatNameCol = OffsetColumn(baseCatNameCol, 10)              ' 例: B→L
 
     ' 行間隔: 12行ごとに次の不具合
     Dim ROW_INTERVAL As Long
@@ -655,7 +676,7 @@ Public Sub InsertDefectsToSheet(ws As Worksheet, defectList As Collection, start
 
         ' 行オフセット計算
         Dim rowOffset As Long
-        rowOffset = pairIdx * ROW_INTERVAL
+        rowOffset = pairIdx * ROW_INTERVAL + (pairIdx \ 3) * 4
 
         ' 奇数=左列、偶数=右列
         Dim isLeft As Boolean
@@ -702,6 +723,19 @@ Public Sub InsertDefectsToSheet(ws As Worksheet, defectList As Collection, start
         ' 評価
         If defect.Exists("evaluationType") Then
             SetCellValueSafe ws, curEvalCol & (baseEvalRow + rowOffset), defect("evaluationType")
+        End If
+
+        ' カテゴリ名
+        If baseCatNameCol <> "" Then
+            If defect.Exists("categoryName") Then
+                Dim curCatNameCol As String
+                If isLeft Then
+                    curCatNameCol = baseCatNameCol
+                Else
+                    curCatNameCol = rightCatNameCol
+                End If
+                SetCellValueSafe ws, curCatNameCol & (baseCatNameRow + rowOffset), defect("categoryName")
+            End If
         End If
 
         ' 修繕方法（tmpl_c のみ repair列あり）
@@ -768,6 +802,7 @@ Public Function GetDefectTemplateMapping() As Object
         If mapWs.Cells(r, 56).Value <> "" Then inner("eval") = CStr(mapWs.Cells(r, 56).Value)
         If mapWs.Cells(r, 57).Value <> "" Then inner("repair") = CStr(mapWs.Cells(r, 57).Value)
         If mapWs.Cells(r, 58).Value <> "" Then inner("image") = CStr(mapWs.Cells(r, 58).Value)
+        If mapWs.Cells(r, 59).Value <> "" Then inner("categoryName") = CStr(mapWs.Cells(r, 59).Value)
 
         Set d(tmplKey) = inner
         r = r + 1
@@ -921,72 +956,74 @@ End Function
 
 
 Public Sub InsertImageToCell(ws As Worksheet, imagePath As String, cellAddress As String)
-
-    On Error GoTo ErrHandler
-
-
-
-    Dim targetRange As Range
-
-    Set targetRange = ws.Range(cellAddress)
-
-
-
-    ' 結合セルの場合は結合範囲を使用
-
-    If targetRange.MergeCells Then
-
-        Set targetRange = targetRange.mergeArea
-
-    End If
-
-
-
-    ' 既存の画像があれば削除
-
-    Dim shp As Shape
-
-    Dim picName As String
-
-    picName = ws.Name & "_" & Replace(cellAddress, "$", "") & "_pic"
-
-
-
     On Error Resume Next
-
+    
+    Dim targetRange As Range
+    Set targetRange = ws.Range(cellAddress)
+    If targetRange Is Nothing Then Exit Sub
+    If targetRange.MergeCells Then Set targetRange = targetRange.mergeArea
+    
+    Dim shp As Shape
+    Dim picName As String
+    picName = ws.Name & "_" & Replace(cellAddress, "$", "") & "_pic"
     Set shp = ws.Shapes(picName)
-
     If Not shp Is Nothing Then shp.Delete
-
-    On Error GoTo 0
-
-
-
-    ' 画像挿入
-
-    Set shp = ws.Shapes.AddPicture( _
-        Filename:=imagePath, _
-        LinkToFile:=False, _
-        SaveWithDocument:=True, _
-        Left:=targetRange.Left, _
-        Top:=targetRange.Top, _
-        Width:=targetRange.Width, _
-        Height:=targetRange.Height)
-
-
-
-    shp.Name = picName
-
-
-
-    Exit Sub
-
-
-
-ErrHandler:
-
-    m_ErrorLog.Add "画像挿入エラー (" & cellAddress & "): " & Err.Description
-
+    Set shp = Nothing
+    Err.Clear
+    
+    Dim actualPath As String
+    
+    #If Mac Then
+        ' Mac: POSIXパスを一時ファイル経由でMac形式パスに変換
+        ' （MacScriptに日本語を直接渡すとエンコーディング破壊される）
+        Dim pathFile As String
+        pathFile = m_TempFolder & "/pathconv.txt"
+        ' 一時ファイルにPOSIXパスを書き込み（tmpフォルダはASCIIなのでOpen可能）
+        Dim macPathFile As String
+        macPathFile = MacScript("return POSIX file """ & pathFile & """ as text")
+        If Err.Number <> 0 Then
+            m_ErrorLog.Add "パスファイル変換失敗: " & Err.Description
+            Err.Clear
+            Exit Sub
+        End If
+        
+        Dim fn As Integer
+        fn = FreeFile
+        Open macPathFile For Output As #fn
+        Print #fn, imagePath
+        Close #fn
+        If Err.Number <> 0 Then
+            m_ErrorLog.Add "パスファイル書込失敗: " & Err.Description
+            Err.Clear
+            Exit Sub
+        End If
+        
+        ' AppleScriptでファイルからパスを読み取り、POSIX file変換
+        Dim script As String
+        script = "set f to read POSIX file """ & pathFile & """" & Chr(10)
+        script = script & "set f to paragraph 1 of f" & Chr(10)
+        script = script & "return POSIX file f as text"
+        actualPath = MacScript(script)
+        If Err.Number <> 0 Or actualPath = "" Then
+            m_ErrorLog.Add "POSIX変換失敗: " & Err.Description & " [" & imagePath & "]"
+            Err.Clear
+            Exit Sub
+        End If
+        
+        ' デバッグ（最初の1回のみ）
+    #Else
+        actualPath = imagePath
+    #End If
+    
+    Err.Clear
+    Set shp = ws.Shapes.AddPicture(actualPath, False, True, targetRange.Left, targetRange.Top, targetRange.Width, targetRange.Height)
+    
+    If Err.Number = 0 And Not shp Is Nothing Then
+        shp.Name = picName
+    Else
+        m_ErrorLog.Add "画像挿入エラー (" & cellAddress & "): " & Err.Number & " " & Err.Description & " [" & actualPath & "]"
+        Err.Clear
+    End If
 End Sub
 
 

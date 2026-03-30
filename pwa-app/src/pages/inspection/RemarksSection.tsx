@@ -37,7 +37,12 @@ function RemarksSection({
   remarksLabel = DEFAULT_REMARKS_LABEL,
   description = DEFAULT_DESCRIPTION,
 }: RemarksSectionProps) {
-  const value = (getItemOption(remarksKey, remarksLabel) as string) || '';
+  // データ保存キーは英字を使用（VBA-JSONパーサーが日本語キーでパースエラーになるため）
+  // VBAマッピングのremarks_generalと一致させる
+  // 既存データの'備考'キーもフォールバックで読み取り
+  const value = (getItemOption(remarksKey, 'remarks_general') as string)
+    || (getItemOption(remarksKey, remarksLabel) as string)
+    || '';
 
   return (
     <div className="bg-white rounded-xl shadow-sm overflow-hidden">
@@ -50,7 +55,7 @@ function RemarksSection({
         </p>
         <textarea
           value={value}
-          onChange={(e) => updateItemOption(remarksKey, remarksLabel, e.target.value)}
+          onChange={(e) => updateItemOption(remarksKey, 'remarks_general', e.target.value)}
           placeholder={`${remarksLabel}を入力してください`}
           className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400 resize-y min-h-[120px]"
           rows={5}
