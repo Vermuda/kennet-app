@@ -358,8 +358,6 @@ export async function exportAsZip(params: ExportParams): Promise<void> {
   const defectsByCategory = new Map<string, DefectInfo[]>();
   for (const defect of defects) {
     if (!defect.imageData || defect.imageData.length === 0) continue;
-    // デバッグ用ダミーデータを除外
-    if (defect.location?.includes('[DEBUG]') || defect.component?.includes('[DEBUG]')) continue;
     const catLabel = defect.inspectionItemId
       ? getCategoryLabel(defect.inspectionItemId)
       : '不明';
