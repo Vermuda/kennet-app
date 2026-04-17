@@ -115,6 +115,8 @@ const PropertyDetailPage: React.FC = () => {
         (!d.blueprintId && d.inspectionId && inspectionIdSet.has(d.inspectionId))
       );
 
+      const filteredRefImages = data.referenceImages.filter((r) => r.propertyId === property.id);
+
       // ZIPエクスポート実行
       await exportAsZip({
         property,
@@ -125,15 +127,14 @@ const PropertyDetailPage: React.FC = () => {
         inspections: filteredInspections,
         defects: filteredDefects,
         standardPhotos,
-        referenceImages: data.referenceImages.filter((r) => r.propertyId === property.id),
+        referenceImages: filteredRefImages,
       });
 
       const evalCount = inspectionChecklist?.evaluations
         ? Object.keys(inspectionChecklist.evaluations).length
         : 0;
 
-      const refImages = data.referenceImages.filter((r) => r.propertyId === property.id && r.imageData);
-      alert(`データをエクスポートしました（ZIP）\n\n図面: ${blueprintsForExport.length}件\n定型写真: ${standardPhotos.filter(p => p.imageData).length}件\n通常写真: ${refImages.length}件\n事象写真: ${filteredDefects.filter(d => d.imageData).length}件\n検査チェックシート: ${evalCount}/101項目`);
+      alert(`データをエクスポートしました（ZIP）\n\n図面: ${blueprintsForExport.length}件\n定型写真: ${standardPhotos.filter(p => p.imageData).length}件\n通常写真: ${filteredRefImages.filter(r => r.imageData).length}件\n事象写真: ${filteredDefects.filter(d => d.imageData).length}件\n検査チェックシート: ${evalCount}/101項目`);
     } catch (error) {
       console.error('[Export] エラー:', error);
       alert('エクスポートに失敗しました: ' + (error instanceof Error ? error.message : String(error)));
