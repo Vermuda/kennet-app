@@ -9,17 +9,18 @@ import type {
   Marker,
   Inspection,
   StandardPhoto,
+  ReferenceImage,
 } from '../types';
 
 // --- Helper: category label mapping ---
 
 const categoryLabelMap: Record<string, string> = {
-  cat1: '外部1',
-  cat2: '外部2',
-  cat3: '外部3',
-  cat4: '外部4',
-  cat5: '外部5',
-  cat8: '遵法性',
+  cat1: '敷地及び地盤',
+  cat2: '各点検口内',
+  cat3: '建築物外部',
+  cat4: '屋根及び屋上',
+  cat5: '共用部内装',
+  cat8: '遵法性関係',
 };
 
 /**
@@ -225,6 +226,7 @@ export interface ExportParams {
   inspections: Inspection[];
   defects: DefectInfo[];
   standardPhotos: StandardPhoto[];
+  referenceImages: ReferenceImage[];
 }
 
 interface StandardPhotoEntry {
@@ -255,6 +257,7 @@ interface BlueprintExportEntry {
   id: string;
   floorId: string;
   imageFile: string;
+  compassImageFile?: string;
   orientation?: number;
   orientationIconX?: number;
   orientationIconY?: number;
@@ -284,6 +287,7 @@ export async function exportAsZip(params: ExportParams): Promise<void> {
     inspections,
     defects,
     standardPhotos,
+    referenceImages,
   } = params;
 
   const zip = new JSZip();
@@ -301,10 +305,10 @@ export async function exportAsZip(params: ExportParams): Promise<void> {
     throw new Error('Failed to create ZIP root folder');
   }
 
-  // --- 1. Standard Photos ---
-  const standardPhotoFolder = root.folder('通常写真');
+  // --- 1a. Standard Photos (定型写真) ---
+  const standardPhotoFolder = root.folder('定型写真');
   if (!standardPhotoFolder) {
-    throw new Error('Failed to create 通常写真 folder');
+    throw new Error('Failed to create 定型写真 folder');
   }
 
   const validPhotos = standardPhotos
@@ -315,11 +319,32 @@ export async function exportAsZip(params: ExportParams): Promise<void> {
   for (let i = 0; i < validPhotos.length; i++) {
     const photo = validPhotos[i];
     const { blob, extension } = base64ToBlob(photo.imageData);
-    const fileName = `通常写真_${padSeq(i + 1)}.${extension}`;
+    const fileName = `定型写真_${padSeq(i + 1)}.${extension}`;
     standardPhotoFolder.file(fileName, blob);
     standardPhotoEntries.push({
       photoType: photo.photoType,
+      imageFile: `定型写真/${fileName}`,
+    });
+  }
+
+  // --- 1b. Reference Photos (通常写真/バックアップ) ---
+  const referencePhotoFolder = root.folder('通常写真');
+  if (!referencePhotoFolder) {
+    throw new Error('Failed to create 通常写真 folder');
+  }
+
+  const validRefImages = referenceImages.filter((r) => r.imageData && r.imageData.length > 0);
+  const referencePhotoEntries: Array<{ id: string; imageFile: string; memo?: string; createdAt: string }> = [];
+  for (let i = 0; i < validRefImages.length; i++) {
+    const ref = validRefImages[i];
+    const { blob, extension } = base64ToBlob(ref.imageData);
+    const fileName = `通常写真_${padSeq(i + 1)}.${extension}`;
+    referencePhotoFolder.file(fileName, blob);
+    referencePhotoEntries.push({
+      id: ref.id,
       imageFile: `通常写真/${fileName}`,
+      memo: ref.memo,
+      createdAt: ref.createdAt,
     });
   }
 
@@ -333,6 +358,8 @@ export async function exportAsZip(params: ExportParams): Promise<void> {
   const defectsByCategory = new Map<string, DefectInfo[]>();
   for (const defect of defects) {
     if (!defect.imageData || defect.imageData.length === 0) continue;
+    // デバッグ用ダミーデータを除外
+    if (defect.location?.includes('[DEBUG]') || defect.component?.includes('[DEBUG]')) continue;
     const catLabel = defect.inspectionItemId
       ? getCategoryLabel(defect.inspectionItemId)
       : '不明';
@@ -370,20 +397,27 @@ export async function exportAsZip(params: ExportParams): Promise<void> {
   }
 
   const blueprintEntries: BlueprintExportEntry[] = [];
+  // 方位画像を別ファイルとして出力（1回のみ）
+  let compassImageFile = '';
+  try {
+    const compassResponse = await fetch('/houi.png');
+    if (compassResponse.ok) {
+      const compassBlob = await compassResponse.blob();
+      blueprintFolder.file('houi.png', compassBlob);
+      compassImageFile = '図面/houi.png';
+    }
+  } catch {
+    // 方位画像取得失敗は無視
+  }
+
   for (const bp of blueprints) {
     if (!bp.imageData || bp.imageData.length === 0) continue;
 
     const floorName = floorNameMap.get(bp.floorId) ?? 'unknown';
     const safeFloorName = sanitizeFileName(floorName);
 
-    let pngBlob: Blob;
-    try {
-      pngBlob = await renderBlueprintWithCompass(bp, '/houi.png');
-    } catch {
-      // Fallback: export raw image without compass
-      const { blob } = base64ToBlob(bp.imageData);
-      pngBlob = blob;
-    }
+    // 図面画像のみ（方位オーバーレイなし）
+    const { blob: pngBlob } = base64ToBlob(bp.imageData);
 
     const fileName = `${safeFloorName}.png`;
     blueprintFolder.file(fileName, pngBlob);
@@ -392,6 +426,7 @@ export async function exportAsZip(params: ExportParams): Promise<void> {
       id: bp.id,
       floorId: bp.floorId,
       imageFile: `図面/${fileName}`,
+      compassImageFile,
       orientation: bp.orientation,
       orientationIconX: bp.orientationIconX,
       orientationIconY: bp.orientationIconY,
@@ -442,6 +477,7 @@ export async function exportAsZip(params: ExportParams): Promise<void> {
     inspections,
     defects: defectEntries,
     standardPhotos: standardPhotoEntries,
+    referencePhotos: referencePhotoEntries,
   };
 
   // VBA-JSON (JsonConverter) が日本語等のマルチバイト文字でパースエラーを起こすため、

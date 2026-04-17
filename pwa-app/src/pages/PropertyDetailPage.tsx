@@ -96,9 +96,18 @@ const PropertyDetailPage: React.FC = () => {
         .equals(propertyId)
         .toArray();
 
+      // この物件に属する blueprintId セット
+      const blueprintIdSet = new Set(blueprintsForExport.map((b) => b.id));
+
       // マーカーをフィルタ
-      const filteredMarkers = data.markers.filter((m) =>
-        data.blueprints.some((b) => b.id === m.blueprintId && floors.some((f) => f.id === b.floorId))
+      const filteredMarkers = data.markers.filter((m) => blueprintIdSet.has(m.blueprintId));
+
+      // inspections・defects をこの物件の図面に限定
+      const filteredInspections = data.inspections.filter((i) => blueprintIdSet.has(i.blueprintId));
+      const inspectionIdSet = new Set(filteredInspections.map((i) => i.id));
+      const filteredDefects = data.defects.filter((d) =>
+        (d.blueprintId && blueprintIdSet.has(d.blueprintId)) ||
+        (!d.blueprintId && d.inspectionId && inspectionIdSet.has(d.inspectionId))
       );
 
       // ZIPエクスポート実行
@@ -108,16 +117,18 @@ const PropertyDetailPage: React.FC = () => {
         blueprints: blueprintsForExport,
         markers: filteredMarkers,
         inspectionChecklist: inspectionChecklist ?? null,
-        inspections: data.inspections,
-        defects: data.defects,
+        inspections: filteredInspections,
+        defects: filteredDefects,
         standardPhotos,
+        referenceImages: data.referenceImages.filter((r) => r.propertyId === property.id),
       });
 
       const evalCount = inspectionChecklist?.evaluations
         ? Object.keys(inspectionChecklist.evaluations).length
         : 0;
 
-      alert(`データをエクスポートしました（ZIP）\n\n図面: ${blueprintsForExport.length}件\n通常写真: ${standardPhotos.filter(p => p.imageData).length}件\n事象写真: ${data.defects.filter(d => d.imageData).length}件\n検査チェックシート: ${evalCount}/101項目`);
+      const refImages = data.referenceImages.filter((r) => r.propertyId === property.id && r.imageData);
+      alert(`データをエクスポートしました（ZIP）\n\n図面: ${blueprintsForExport.length}件\n定型写真: ${standardPhotos.filter(p => p.imageData).length}件\n通常写真: ${refImages.length}件\n事象写真: ${filteredDefects.filter(d => d.imageData).length}件\n検査チェックシート: ${evalCount}/101項目`);
     } catch (error) {
       console.error('[Export] エラー:', error);
       alert('エクスポートに失敗しました: ' + (error instanceof Error ? error.message : String(error)));
@@ -151,6 +162,14 @@ const PropertyDetailPage: React.FC = () => {
           if (item.groupId) {
             const groupStatus = inspectionData?.groupExistence?.[item.groupId];
             if (groupStatus && groupStatus.exists === false) {
+              continue;
+            }
+          }
+
+          // 屋外階段「該当無」の場合はスキップ（item72-74）
+          if (item.groupId === 'group_okugai_kaidan') {
+            const settingVal = inspectionData?.options?.['item72']?.['設置'];
+            if (settingVal === '該当無') {
               continue;
             }
           }
