@@ -83,9 +83,14 @@ const PropertyDetailPage: React.FC = () => {
     try {
       const data = await loadData();
 
+      // この物件の階層IDセット（stateではなくloadData()の最新データから取得）
+      const propertyFloorIds = new Set(
+        data.floors.filter((f) => f.propertyId === propertyId).map((f) => f.id)
+      );
+
       // 方位情報を含む図面データを取得
       const blueprintsForExport = data.blueprints
-        .filter((b) => floors.some((f) => f.id === b.floorId));
+        .filter((b) => propertyFloorIds.has(b.floorId));
 
       // 検査チェックシートのデータを取得
       const inspectionChecklist = await getPropertyInspectionData(propertyId);
