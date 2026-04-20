@@ -1194,9 +1194,9 @@ Public Sub ImportItemSurveyStatus(ws As Worksheet, itemSurvey As Object)
                             SetCellValueSafe ws, inner("not_conducted"), ChrW(&H25A0)
                         End If
                         ' •s‰Â——R‚Ì“ü—Í
-                        If status.Exists("reason") Then
+                        If status.Exists("notConductedReason") Then
                             If inner.Exists("reason") Then
-                                SetCellValueSafe ws, inner("reason"), CStr(status("reason"))
+                                SetCellValueSafe ws, inner("reason"), CStr(status("notConductedReason"))
                             End If
                         End If
                 End Select
