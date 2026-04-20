@@ -611,7 +611,7 @@ Public Function BuildFinishMaterialKey(groupId As String, matName As String) As 
 
     Select Case groupId
 
-        Case "group_kiso": prefix = "finish_kiso_"
+        Case "group_kiso": prefix = "finish_main_"
 
         Case "group_gaiheki": prefix = "finish_gaiheki_"
 
@@ -639,6 +639,9 @@ Public Function BuildFinishMaterialKey(groupId As String, matName As String) As 
 
         Case "ボード": suffix = "board"
 
+        Case "コンクリート直仕上げ": suffix = "concrete"
+        Case "モルタル仕上げ・その他塗り仕上げ": suffix = "mortar"
+        Case "その他仕上げ": suffix = "other"
         Case Else: suffix = "other"
 
     End Select
@@ -720,6 +723,60 @@ Public Sub ImportOptions(ws As Worksheet, options As Object)
 
     Next itemId
 
+
+    ' スコープ調査実施可/不可: groupIdで区別して書き込み
+    If options.Exists("group_yukashita") Then
+        If IsObject(options("group_yukashita")) Then
+            Dim ykScope As Object
+            Set ykScope = options("group_yukashita")
+            If ykScope.Exists("スコープ調査実施") Then
+                Dim ykScopeVal As String
+                ykScopeVal = CStr(ykScope("スコープ調査実施"))
+                If ykScopeVal = "実施可" And optMap.Exists("scope_possible_yukashita") Then
+                    SetCellValueSafe ws, optMap("scope_possible_yukashita"), ChrW(&H25A0)
+                ElseIf ykScopeVal = "実施不可" And optMap.Exists("scope_impossible_yukashita") Then
+                    SetCellValueSafe ws, optMap("scope_impossible_yukashita"), ChrW(&H25A0)
+                End If
+            End If
+        End If
+    End If
+    If options.Exists("group_koyaura") Then
+        If IsObject(options("group_koyaura")) Then
+            Dim kyScope As Object
+            Set kyScope = options("group_koyaura")
+            If kyScope.Exists("スコープ調査実施") Then
+                Dim kyScopeVal As String
+                kyScopeVal = CStr(kyScope("スコープ調査実施"))
+                If kyScopeVal = "実施可" And optMap.Exists("scope_possible_koyaura") Then
+                    SetCellValueSafe ws, optMap("scope_possible_koyaura"), ChrW(&H25A0)
+                ElseIf kyScopeVal = "実施不可" And optMap.Exists("scope_impossible_koyaura") Then
+                    SetCellValueSafe ws, optMap("scope_impossible_koyaura"), ChrW(&H25A0)
+                End If
+            End If
+        End If
+    End If
+
+    ' 鉄骨用小屋裏スコープ調査実施可/不可
+    If options.Exists("group_koyaura_steel") Then
+        If IsObject(options("group_koyaura_steel")) Then
+            Dim ksScope As Object
+            Set ksScope = options("group_koyaura_steel")
+            If ksScope.Exists("スコープ調査実施") Then
+                Dim ksScopeVal As String
+                ksScopeVal = CStr(ksScope("スコープ調査実施"))
+                If ksScopeVal = "実施可" And optMap.Exists("scope_possible_koyaura_steel") Then
+                    SetCellValueSafe ws, optMap("scope_possible_koyaura_steel"), ChrW(&H25A0)
+                ElseIf ksScopeVal = "実施不可" And optMap.Exists("scope_impossible_koyaura_steel") Then
+                    SetCellValueSafe ws, optMap("scope_impossible_koyaura_steel"), ChrW(&H25A0)
+                End If
+            End If
+            If ksScope.Exists("スコープ不可理由") Then
+                If optMap.Exists("scope_reason_koyaura_steel") Then
+                    SetCellValueSafe ws, optMap("scope_reason_koyaura_steel"), CStr(ksScope("スコープ不可理由"))
+                End If
+            End If
+        End If
+    End If
 
     ' スコープ不可理由: groupIdで区別して書き込み
     If options.Exists("group_yukashita") Then
@@ -989,29 +1046,9 @@ Public Sub ImportMaintenanceStatus(ws As Worksheet, maintStatus As Object)
 
 
 
-            ' need: "required" / "not_required" / null
-
-            If status.Exists("need") Then
-
-                If Not IsNull(status("need")) Then
-
-                    Dim need As String
-
-                    need = CStr(status("need"))
-
-                    If need = "required" And inner.Exists("required") Then
-
-                        SetCellValueSafe ws, inner("required"), ChrW(&H25A0)
-
-                    ElseIf need = "not_required" And inner.Exists("not_required") Then
-
-                        SetCellValueSafe ws, inner("not_required"), ChrW(&H25A0)
-
-                    End If
-
-                End If
-
-            End If
+            ' need（要/不要）の転記はPWA側で入力削除済みのためスキップ
+            ' Excelで劣化状況から要/不要を判定する運用に変更
+            ' (旧ロジックはgit履歴参照)
 
 
 
@@ -1389,18 +1426,9 @@ Public Sub ImportStandardPhotos(jsonData As Object)
         End If
     Next i
 
-    ' シート再保護
-    On Error Resume Next
-    ws.Protect Password:=DataImport.SHEET_PW
-    On Error GoTo 0
-
     Exit Sub
 ErrHandler:
     DataImport.m_ErrorLog.Add "定形写真インポートエラー: " & Err.Description
-    ' シート再保護（エラー時も確実に）
-    On Error Resume Next
-    ws.Protect Password:=DataImport.SHEET_PW
-    On Error GoTo 0
 End Sub
 
 
@@ -1573,7 +1601,7 @@ Public Function FormatIsoDateTime(isoStr As String) As String
         dy = dy + 1
     End If
 
-    FormatIsoDateTime = yr & "年" & mo & "月" & dy & "日 " & hr & "時" & mn & "分"
+    FormatIsoDateTime = hr & ":" & Right("0" & mn, 2)
     Exit Function
 ErrHandler:
     FormatIsoDateTime = isoStr

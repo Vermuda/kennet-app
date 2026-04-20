@@ -12,6 +12,7 @@ Option Explicit
 Public Const SHEET_PW As String = "2025Ken0129ken"
 Public Const SURVEY_SHEET As String = "現地調査"
 Public Const MAPPING_SHEET As String = "マッピング"
+Public Const DESKTOP_SHEET As String = "机上チェックシート"
 Public Const TEMPLATE_C As String = "評価c劣化事象"      ' Sheet3テンプレート
 Public Const TEMPLATE_B2 As String = "評価b2劣化事象"    ' Sheet4テンプレート
 Public Const MAX_IMAGES_PER_SHEET As Long = 18
@@ -535,15 +536,21 @@ End Sub
 
 Public Sub ReprotectAllSheets()
 
-    Dim ws As Worksheet
+    '' 保護対象は「机上チェックシート」と「現地調査」のみ
+    Dim targetNames As Variant
+    targetNames = Array("机上チェックシート", "現地調査")
 
     On Error Resume Next
 
-    For Each ws In ThisWorkbook.Worksheets
-
-        ws.Protect Password:=SHEET_PW
-
-    Next ws
+    Dim i As Long
+    For i = LBound(targetNames) To UBound(targetNames)
+        Dim ws As Worksheet
+        Set ws = Nothing
+        Set ws = ThisWorkbook.Worksheets(targetNames(i))
+        If Not ws Is Nothing Then
+            ws.Protect Password:=SHEET_PW
+        End If
+    Next i
 
     On Error GoTo 0
 

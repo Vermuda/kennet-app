@@ -538,6 +538,18 @@ Public Sub CreateDefectSheetsForFloor(templateName As String, floorName As Strin
 
         Set newWs = ActiveSheet
 
+        '' テンプレートが非表示でも生成シートは表示する
+        newWs.Visible = xlSheetVisible
+
+        ' シート名のサニタイズ
+        newSheetName = Replace(newSheetName, ":", "")
+        newSheetName = Replace(newSheetName, "/", "")
+        newSheetName = Replace(newSheetName, Chr(92), "")
+        newSheetName = Replace(newSheetName, "?", "")
+        newSheetName = Replace(newSheetName, "*", "")
+        newSheetName = Replace(newSheetName, "[", "")
+        newSheetName = Replace(newSheetName, "]", "")
+        If Len(newSheetName) > 31 Then newSheetName = Left(newSheetName, 31)
         newWs.Name = newSheetName
 
 
