@@ -496,11 +496,16 @@ Public Sub CreateDefectSheetsForFloor(templateName As String, floorName As Strin
 
         If Not existingSheet Is Nothing Then
 
-            Application.DisplayAlerts = False
+            '' マッピング系シートは絶対に削除しない（安全弁）
+            If existingSheet.Name = MAPPING_SHEET Or existingSheet.Name = CellAddressCollector.KP_MAPPING_SHEET Then
+                m_ErrorLog.Add "BUGガード: newSheetName='" & newSheetName & "' がマッピングシートに一致。削除をスキップ。"
+            Else
+                Application.DisplayAlerts = False
 
-            existingSheet.Delete
+                existingSheet.Delete
 
-            Application.DisplayAlerts = True
+                Application.DisplayAlerts = True
+            End If
 
         End If
 
@@ -532,11 +537,56 @@ Public Sub CreateDefectSheetsForFloor(templateName As String, floorName As Strin
 
 
 
-        templateWs.Copy After:=Worksheets(Worksheets.Count)
+        '' テンプレが非表示だとCopy位置が不安定になるため一時的に可視化
+        Dim tmplOrigVisibleD As XlSheetVisibility
+        tmplOrigVisibleD = templateWs.Visible
+        If tmplOrigVisibleD <> xlSheetVisible Then templateWs.Visible = xlSheetVisible
+
+        '' Copy前の全シート名を記録（Copy後の差分で新シートを特定するため）
+        Dim beforeNamesD As Object
+        Set beforeNamesD = CreateObject("Scripting.Dictionary")
+        Dim wsBefD As Worksheet
+        For Each wsBefD In Worksheets
+            beforeNamesD(wsBefD.Name) = True
+        Next wsBefD
+        Dim beforeCountD As Long
+        beforeCountD = Worksheets.Count
+        '' Copy位置は末尾ではなく最後の可視シート後ろ
+        Dim anchorWsD As Worksheet
+        Set anchorWsD = DataImportKeyPlan.GetLastVisibleSheet()
+        If anchorWsD Is Nothing Then Set anchorWsD = Worksheets(Worksheets.Count)
+        templateWs.Copy After:=anchorWsD
+        If Worksheets.Count <= beforeCountD Then
+            m_ErrorLog.Add "不具合Copyが失敗しました: newSheetName=" & newSheetName
+            If tmplOrigVisibleD <> xlSheetVisible Then templateWs.Visible = tmplOrigVisibleD
+            Exit Sub
+        End If
 
         Dim newWs As Worksheet
 
-        Set newWs = ActiveSheet
+        '' Copy前後のシート名差分で新シートを特定
+        Set newWs = Nothing
+        Dim wsAftD As Worksheet
+        For Each wsAftD In Worksheets
+            If Not beforeNamesD.Exists(wsAftD.Name) Then
+                Set newWs = wsAftD
+                Exit For
+            End If
+        Next wsAftD
+
+        '' テンプレートのVisible状態を復元
+        If tmplOrigVisibleD <> xlSheetVisible Then templateWs.Visible = tmplOrigVisibleD
+
+        If newWs Is Nothing Then
+            m_ErrorLog.Add "劣化事象シート新シート特定失敗: newSheetName=" & newSheetName
+            Exit Sub
+        End If
+
+        '' マッピングシートを誤って掴んだら処理を中断（安全弁）
+        If newWs.Name = MAPPING_SHEET Or newWs.Name = CellAddressCollector.KP_MAPPING_SHEET Then
+            m_ErrorLog.Add "不具合シート生成でマッピングシートを掴みました: " & newWs.Name & " (newSheetName=" & newSheetName & ")。処理を中断します。"
+            Exit Sub
+        End If
 
         '' テンプレートが非表示でも生成シートは表示する
         newWs.Visible = xlSheetVisible

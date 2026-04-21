@@ -153,9 +153,14 @@ Public Sub CreateSingleKeyPlanSheet(templateName As String, sheetName As String,
     Dim existingSheet As Worksheet
     Set existingSheet = Worksheets(sheetName)
     If Not existingSheet Is Nothing Then
-        Application.DisplayAlerts = False
-        existingSheet.Delete
-        Application.DisplayAlerts = True
+        '' マッピング系シートは絶対に削除しない（安全弁）
+        If existingSheet.Name = DataImport.MAPPING_SHEET Or existingSheet.Name = KP_MAPPING_SHEET Then
+            DataImport.m_ErrorLog.Add "BUGガード: sheetName='" & sheetName & "' がマッピングシートに一致。削除をスキップ。"
+        Else
+            Application.DisplayAlerts = False
+            existingSheet.Delete
+            Application.DisplayAlerts = True
+        End If
     End If
     Set existingSheet = Nothing
     On Error GoTo 0
@@ -169,9 +174,51 @@ Public Sub CreateSingleKeyPlanSheet(templateName As String, sheetName As String,
         DataImport.m_ErrorLog.Add "テンプレートが見つかりません: " & templateName
         Exit Sub
     End If
-    tmplWs.Copy After:=Worksheets(Worksheets.Count)
+    '' Copy前後のシート数を記録してCopy失敗を検出する
+    '' テンプレが非表示だとCopy位置が不安定になるため一時的に可視化
+    Dim tmplOrigVisible As XlSheetVisibility
+    tmplOrigVisible = tmplWs.Visible
+    If tmplOrigVisible <> xlSheetVisible Then tmplWs.Visible = xlSheetVisible
+    '' Copy前の全シート名を記録（Copy後の差分で新シートを特定するため）
+    Dim beforeNames As Object
+    Set beforeNames = CreateObject("Scripting.Dictionary")
+    Dim wsBef As Worksheet
+    For Each wsBef In Worksheets
+        beforeNames(wsBef.Name) = True
+    Next wsBef
+    Dim beforeCount As Long
+    beforeCount = Worksheets.Count
+    '' Copy位置は末尾ではなく最後の可視シート後ろを指定（末尾が非表示マッピング時の不具合回避）
+    Dim anchorWs As Worksheet
+    Set anchorWs = GetLastVisibleSheet()
+    If anchorWs Is Nothing Then Set anchorWs = Worksheets(Worksheets.Count)
+    tmplWs.Copy After:=anchorWs
+    If Worksheets.Count <= beforeCount Then
+        DataImport.m_ErrorLog.Add "キープランCopyが失敗しました: sheetName=" & sheetName
+        If tmplOrigVisible <> xlSheetVisible Then tmplWs.Visible = tmplOrigVisible
+        Exit Sub
+    End If
     Dim ws As Worksheet
-    Set ws = Worksheets(Worksheets.Count)
+    '' Copy前後のシート名差分で新シートを特定（位置・ActiveSheet非依存）
+    Set ws = Nothing
+    Dim wsAft As Worksheet
+    For Each wsAft In Worksheets
+        If Not beforeNames.Exists(wsAft.Name) Then
+            Set ws = wsAft
+            Exit For
+        End If
+    Next wsAft
+    '' テンプレートのVisible状態を復元
+    If tmplOrigVisible <> xlSheetVisible Then tmplWs.Visible = tmplOrigVisible
+    If ws Is Nothing Then
+        DataImport.m_ErrorLog.Add "キープラン新シート特定失敗: sheetName=" & sheetName
+        Exit Sub
+    End If
+    '' マッピングシートを誤って掴んだら処理を中断（安全弁）
+    If ws.Name = DataImport.MAPPING_SHEET Or ws.Name = KP_MAPPING_SHEET Then
+        DataImport.m_ErrorLog.Add "キープラン生成でマッピングシートを掴みました: " & ws.Name & " (sheetName=" & sheetName & ")。処理を中断します。"
+        Exit Sub
+    End If
     '' テンプレートが非表示でも生成シートは表示する
     ws.Visible = xlSheetVisible
     '' シート名のサニタイズ（31文字制限、禁止文字除去）
@@ -592,3 +639,14 @@ End Function
 
 
 
+
+'' 最後の可視シートを取得（Copy位置アンカー用）
+Public Function GetLastVisibleSheet() As Worksheet
+    Dim i As Long
+    For i = Worksheets.Count To 1 Step -1
+        If Worksheets(i).Visible = xlSheetVisible Then
+            Set GetLastVisibleSheet = Worksheets(i)
+            Exit Function
+        End If
+    Next i
+End Function
