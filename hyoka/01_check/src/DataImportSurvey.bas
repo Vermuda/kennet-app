@@ -1306,11 +1306,11 @@ End Sub
 '' =============================================
 
 '' =============================================
-'' 定形写真インポート
+'' 定型写真インポート
 '' =============================================
 
 
-'' テーブルJ: 定形写真マッピング
+'' テーブルJ: 定型写真マッピング
 '' マッピングシート列47=photoType, 列49=imageCellAddress
 '' 戻り値: Dictionary - photoType(Long) -> cellAddress(String)
 
@@ -1342,9 +1342,9 @@ Public Function GetStandardPhotoMapping() As Object
 End Function
 
 
-'' 定形写真のインポート
+'' 定型写真のインポート
 '' jsonData("property")("standardPhotos") から写真を読み取り、
-'' 「定形写真」シートの対応セルに画像を挿入する
+'' 「定型写真」シートの対応セルに画像を挿入する
 
 Public Sub ImportStandardPhotos(jsonData As Object)
     On Error GoTo ErrHandler
@@ -1366,13 +1366,13 @@ Public Sub ImportStandardPhotos(jsonData As Object)
     End If
     If photos.Count = 0 Then Exit Sub
 
-    ' 定形写真シートを取得
+    ' 定型写真シートを取得
     Dim ws As Worksheet
     On Error Resume Next
-    Set ws = Worksheets("定形写真")
+    Set ws = Worksheets("定型写真")
     On Error GoTo ErrHandler
     If ws Is Nothing Then
-        DataImport.m_ErrorLog.Add "定形写真シートが見つかりません"
+        DataImport.m_ErrorLog.Add "定型写真シートが見つかりません"
         Exit Sub
     End If
 
@@ -1428,7 +1428,7 @@ Public Sub ImportStandardPhotos(jsonData As Object)
 
     Exit Sub
 ErrHandler:
-    DataImport.m_ErrorLog.Add "定形写真インポートエラー: " & Err.Description
+    DataImport.m_ErrorLog.Add "定型写真インポートエラー: " & Err.Description
 End Sub
 
 

@@ -701,7 +701,7 @@ Private Sub SetupTableJ(ws As Worksheet)
         r = pt + 2  ' 行3～18
         ws.Cells(r, 47).Value = pt
         ws.Cells(r, 48).Value = photoNames(pt)
-        ws.Cells(r, 50).Value = "定形写真シート"
+        ws.Cells(r, 50).Value = "定型写真シート"
         ws.Cells(r, 49).Interior.Color = RGB(255, 255, 200)
     Next pt
 End Sub
@@ -1201,12 +1201,12 @@ NextBuildGroup:
     Loop
 
     ' === テーブルJ: AW列(画像挿入先セル) の空 ===
-    ' ※定形写真シートでのセル収集
+    ' ※定型写真シートでのセル収集
     r = 3
     Do While mapWs.Cells(r, 47).Value <> ""
         If mapWs.Cells(r, 49).Value = "" Then
             g_CollectItems.Add Array(MAPPING_SHEET, r, 49, _
-                "【定型写真】" & mapWs.Cells(r, 48).Value & " ※定形写真シートでクリック")
+                "【定型写真】" & mapWs.Cells(r, 48).Value & " ※定型写真シートでクリック")
         End If
         r = r + 1
     Loop
@@ -1503,11 +1503,11 @@ Private Sub ShowCurrentPrompt()
     ' シート切替が必要な項目の案内
     Dim desc As String
     desc = item(3)
-    If InStr(desc, "※定形写真シートでクリック") > 0 Then
-        MsgBox "次の項目は「定形写真」シートでセルをクリックしてください。" & vbCrLf & vbCrLf & _
+    If InStr(desc, "※定型写真シートでクリック") > 0 Then
+        MsgBox "次の項目は「定型写真」シートでセルをクリックしてください。" & vbCrLf & vbCrLf & _
                msg, vbInformation, "シート切替案内"
         On Error Resume Next
-        Worksheets("定形写真").Activate
+        Worksheets("定型写真").Activate
         On Error GoTo 0
     ElseIf InStr(desc, "※該当シートでクリック") > 0 Then
         MsgBox "次の項目は該当する不具合シートでセルをクリックしてください。" & vbCrLf & vbCrLf & _
