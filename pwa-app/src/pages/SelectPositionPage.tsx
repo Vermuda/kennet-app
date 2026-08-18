@@ -665,11 +665,6 @@ const SelectPositionPage: React.FC = () => {
                   {Math.round(scale * 100)}%
                 </div>
               )}
-
-              <div className="absolute bottom-4 left-4 right-4 bg-black/70 text-white px-4 py-3 rounded-lg text-center">
-                <p className="text-sm font-bold">撮影位置をタップしてください</p>
-                <p className="text-xs text-slate-300 mt-1">タップした位置が不具合の場所として記録されます</p>
-              </div>
             </>
           ) : (
             <div className="text-slate-400">読み込み中...</div>
