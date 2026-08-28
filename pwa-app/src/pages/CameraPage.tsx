@@ -5,9 +5,12 @@ import { compressCanvas, formatSize } from '../utils/imageCompression';
 // カメラの取得解像度。未指定だと端末既定（640x480程度）になり、Excel貼付時に画像が荒くなる。
 // ideal 指定のため非対応端末でも取得失敗にはならない。
 const CAPTURE_RESOLUTION = {
-  width: { ideal: 2560 },
-  height: { ideal: 1440 },
+  width: { ideal: 3840 },
+  height: { ideal: 2160 },
 } as const;
+
+// 圧縮後の長辺上限（px）。向きに依存せず長辺をこの値に収める
+const MAX_LONG_SIDE = 1920;
 import { logStorageUsage, getStorageWarningLevel, getSetting, loadData, updateData } from '../storage/indexedDB';
 import { generateId } from '../utils/helpers';
 import type { ReferenceImage } from '../types';
@@ -17,6 +20,60 @@ const PORTRAIT_ASPECT = 9 / 16;
 const TIMER_SETTING_KEY = 'cameraTimerSeconds';
 
 type OrientationMode = 'portrait' | 'landscape';
+
+/**
+ * ストリーム取得後に端末が対応する最大解像度を明示適用する。
+ *
+ * getUserMedia の width/height は ideal 指定が無視される端末があり
+ * （iOS Safari で facingMode と併用した場合など）、既定の 640x480 のまま
+ * ストリームが開始されることがある。取得済みトラックに対して
+ * applyConstraints で再指定するとこれを回避できるケースが多い。
+ */
+const maximizeTrackResolution = async (track: MediaStreamTrack): Promise<void> => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const caps = (track.getCapabilities?.() ?? {}) as any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const before = track.getSettings() as any;
+
+    console.log('[Camera] track settings (before):', {
+      resolution: `${before.width}x${before.height}`,
+      capsWidth: caps.width,
+      capsHeight: caps.height,
+    });
+
+    const maxW = caps.width?.max;
+    const maxH = caps.height?.max;
+    if (!maxW || !maxH) {
+      console.warn('[Camera] 解像度のcapabilitiesを取得できませんでした');
+      return;
+    }
+
+    if ((before.width ?? 0) >= maxW) {
+      console.log('[Camera] 既に最大解像度で取得済み');
+      return;
+    }
+
+    // 幅のみ exact 指定（高さは端末のアスペクト比に任せる）→ 失敗したら ideal で再試行
+    try {
+      await track.applyConstraints({ width: { exact: maxW } });
+    } catch {
+      console.warn('[Camera] exact幅の適用に失敗。idealで再試行');
+      await track.applyConstraints({
+        width: { ideal: maxW },
+        height: { ideal: maxH },
+      });
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const after = track.getSettings() as any;
+    console.log('[Camera] track settings (after):', {
+      resolution: `${after.width}x${after.height}`,
+    });
+  } catch (err) {
+    console.warn('[Camera] 解像度の最大化に失敗:', err);
+  }
+};
 
 const CameraPage: React.FC = () => {
   const { mode } = useParams<{ mode: 'defect' | 'reference' | 'standard' }>();
@@ -51,6 +108,9 @@ const CameraPage: React.FC = () => {
 
   // 保存完了トースト（通常撮影＝referenceモードで使用）
   const [showSavedToast, setShowSavedToast] = useState(false);
+
+  // 撮影解像度の実測値（画質確認用に画面表示する）
+  const [captureInfo, setCaptureInfo] = useState<{ source: string; saved: string } | null>(null);
 
   // デバイスの実際の向き追跡（撮影モードは変更しない）
   useEffect(() => {
@@ -142,8 +202,14 @@ const CameraPage: React.FC = () => {
         }
       }
 
-      // ズーム対応検出
       const track = mediaStream.getVideoTracks()[0];
+
+      // 端末の最大解像度を明示適用（ideal指定が無視される端末への対策）
+      if (track) {
+        await maximizeTrackResolution(track);
+      }
+
+      // ズーム対応検出
       if (track) {
         const caps = track.getCapabilities() as any;
         if (caps.zoom) {
@@ -296,9 +362,13 @@ const CameraPage: React.FC = () => {
           // canvas から直接エンコード（中間JPEGを挟まないことで二重劣化を回避）
           const compressed = compressCanvas(canvas, {
             quality: 0.9,
-            maxWidth: 1920,
-            maxHeight: 1080,
+            maxLongSide: MAX_LONG_SIDE,
             format: 'webp',
+          });
+
+          setCaptureInfo({
+            source: `${Math.round(cropW)}x${Math.round(cropH)}`,
+            saved: `${compressed.width}x${compressed.height}`,
           });
 
           console.log('[Camera] Image compressed:', {
@@ -403,6 +473,12 @@ const CameraPage: React.FC = () => {
         video: { facingMode: newMode, ...CAPTURE_RESOLUTION },
         audio: false,
       });
+
+      const newTrack = mediaStream.getVideoTracks()[0];
+      if (newTrack) {
+        await maximizeTrackResolution(newTrack);
+      }
+
       setStream(mediaStream);
       setCameraStarted(true);
     } catch (err) {
@@ -612,7 +688,14 @@ const CameraPage: React.FC = () => {
             <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
             </svg>
-            <span className="font-bold text-lg">保存完了</span>
+            <div>
+              <span className="font-bold text-lg">保存完了</span>
+              {captureInfo && (
+                <p className="text-xs text-white/70 mt-0.5">
+                  {captureInfo.source} → {captureInfo.saved}
+                </p>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -754,8 +837,14 @@ const CameraPage: React.FC = () => {
             <img
               src={capturedImage}
               alt="撮影した画像"
-              className="w-full h-auto rounded-xl mb-4"
+              className="w-full h-auto rounded-xl mb-2"
             />
+
+            {captureInfo && (
+              <p className="text-center text-xs text-white/60 mb-4">
+                撮影 {captureInfo.source} / 保存 {captureInfo.saved}
+              </p>
+            )}
 
             <div className="flex gap-4">
               <button

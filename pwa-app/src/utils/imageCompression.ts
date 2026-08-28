@@ -17,6 +17,11 @@ export interface CompressionOptions {
   quality?: number; // 0.0 - 1.0
   maxWidth?: number;
   maxHeight?: number;
+  /**
+   * 長辺の上限（px）。指定時は maxWidth/maxHeight より優先し、向きに依存せず
+   * 長辺をこの値に収める。縦持ち撮影で解像度が落ちるのを防ぐ。
+   */
+  maxLongSide?: number;
   format?: 'webp' | 'jpeg';
 }
 
@@ -154,6 +159,7 @@ export const compressCanvas = (
     quality = 0.9,
     maxWidth = 1920,
     maxHeight = 1080,
+    maxLongSide,
     format = 'webp',
   } = options;
 
@@ -164,14 +170,24 @@ export const compressCanvas = (
   let height = sourceCanvas.height;
   const aspectRatio = width / height;
 
-  if (width > maxWidth) {
-    width = maxWidth;
-    height = width / aspectRatio;
-  }
+  if (maxLongSide) {
+    // 長辺基準（向き非依存）
+    const longSide = Math.max(width, height);
+    if (longSide > maxLongSide) {
+      const scale = maxLongSide / longSide;
+      width *= scale;
+      height *= scale;
+    }
+  } else {
+    if (width > maxWidth) {
+      width = maxWidth;
+      height = width / aspectRatio;
+    }
 
-  if (height > maxHeight) {
-    height = maxHeight;
-    width = height * aspectRatio;
+    if (height > maxHeight) {
+      height = maxHeight;
+      width = height * aspectRatio;
+    }
   }
 
   width = Math.round(width);
