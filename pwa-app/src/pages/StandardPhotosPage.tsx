@@ -2,17 +2,14 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { getData, updateData } from '../storage/indexedDB';
 import { generateId } from '../utils/helpers';
-import { compressImage } from '../utils/imageCompression';
 import {
   STANDARD_PHOTO_TYPES,
   getRequiredPhotoCount,
   getOptionalPhotoCount,
   getStandardPhotoTypeById,
 } from '../utils/standardPhotoTypes';
+import { DEBUG_MODE } from './inspection/inspectionConstants';
 import type { Property, StandardPhoto } from '../types';
-
-// デバッグモード: trueにするとダミー画像で一括入力ができる
-const DEBUG_MODE = true;
 
 // ダミー画像生成（Canvas APIで簡単な画像を生成）
 const generateDummyImage = (photoType: number, photoName: string): string => {
@@ -65,17 +62,8 @@ const StandardPhotosPage: React.FC = () => {
     currentProperty: Property
   ) => {
     try {
-      // 画像を圧縮（定型写真は70%品質、最大1280x720）
-      const compressed = await compressImage(imageData, {
-        quality: 0.7,
-        maxWidth: 1280,
-        maxHeight: 720,
-        format: 'webp',
-      });
-
-      console.log(
-        `[StandardPhoto] Compressed ${photoType}: ${compressed.originalSize} → ${compressed.compressedSize} (${compressed.compressionRatio}%)`
-      );
+      // 撮影時（CameraPage）にWebP圧縮・リサイズ済みのため、ここでは再圧縮しない。
+      // 再圧縮すると多重エンコードとなりExcel貼付時に画像が荒くなる。
 
       const photoTypeInfo = getStandardPhotoTypeById(photoType);
       if (!photoTypeInfo) {
@@ -98,7 +86,7 @@ const StandardPhotosPage: React.FC = () => {
         id: generateId(),
         propertyId: propertyId!,
         photoType,
-        imageData: compressed.dataUrl,
+        imageData,
         isRequired: photoTypeInfo.required,
         createdAt: new Date().toISOString(),
         ...(previousImages && previousImages.length > 0 ? { previousImages } : {}),
@@ -449,9 +437,14 @@ const StandardPhotosPage: React.FC = () => {
                 </div>
 
                 {/* 写真名 */}
-                <p className="text-xs text-gray-700 font-medium leading-tight line-clamp-2">
+                <p className="text-xs text-gray-700 font-medium leading-tight line-clamp-3">
                   {photoType.name}
                 </p>
+                {photoType.id === 7 && (
+                  <span className="mt-1 inline-block bg-amber-500 text-white text-[8px] px-1.5 py-0.5 rounded font-bold">
+                    メジャー測定時
+                  </span>
+                )}
               </button>
             );
           })}

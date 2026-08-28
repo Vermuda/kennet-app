@@ -1,6 +1,13 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
-import { compressImage, formatSize, getBase64Size } from '../utils/imageCompression';
+import { compressCanvas, formatSize } from '../utils/imageCompression';
+
+// カメラの取得解像度。未指定だと端末既定（640x480程度）になり、Excel貼付時に画像が荒くなる。
+// ideal 指定のため非対応端末でも取得失敗にはならない。
+const CAPTURE_RESOLUTION = {
+  width: { ideal: 2560 },
+  height: { ideal: 1440 },
+} as const;
 import { logStorageUsage, getStorageWarningLevel, getSetting, loadData, updateData } from '../storage/indexedDB';
 import { generateId } from '../utils/helpers';
 import type { ReferenceImage } from '../types';
@@ -32,12 +39,18 @@ const CameraPage: React.FC = () => {
   // デバイスの実際の向き（横持ちかどうか）
   const [isDeviceLandscape, setIsDeviceLandscape] = useState(window.innerWidth > window.innerHeight);
 
+  // カメラ向き（アウト/イン）
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
+
   // ズーム・フォーカス関連
   const [zoomValue, setZoomValue] = useState(1);
   const zoomRef = useRef(1);
   const zoomRangeRef = useRef<{ min: number; max: number } | null>(null);
   const [focusPoint, setFocusPoint] = useState<{ x: number; y: number } | null>(null);
   const pinchRef = useRef({ isPinching: false, initialDistance: 0, startZoom: 1 });
+
+  // 保存完了トースト（通常撮影＝referenceモードで使用）
+  const [showSavedToast, setShowSavedToast] = useState(false);
 
   // デバイスの実際の向き追跡（撮影モードは変更しない）
   useEffect(() => {
@@ -102,7 +115,7 @@ const CameraPage: React.FC = () => {
     try {
       console.log('[Camera] startCamera called');
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
+        video: { facingMode, ...CAPTURE_RESOLUTION },
         audio: false,
       });
       console.log('[Camera] getUserMedia success', {
@@ -265,11 +278,7 @@ const CameraPage: React.FC = () => {
           0, 0, cropW, cropH
         );
 
-        const originalImageData = canvas.toDataURL('image/jpeg', 0.9);
-        const originalSize = getBase64Size(originalImageData);
-
-        console.log('[Camera] Original image captured:', {
-          size: formatSize(originalSize),
+        console.log('[Camera] Original frame captured:', {
           dimensions: `${Math.round(cropW)}x${Math.round(cropH)}`,
         });
 
@@ -284,8 +293,9 @@ const CameraPage: React.FC = () => {
         }
 
         try {
-          const compressed = await compressImage(originalImageData, {
-            quality: 0.8,
+          // canvas から直接エンコード（中間JPEGを挟まないことで二重劣化を回避）
+          const compressed = compressCanvas(canvas, {
+            quality: 0.9,
             maxWidth: 1920,
             maxHeight: 1080,
             format: 'webp',
@@ -293,9 +303,8 @@ const CameraPage: React.FC = () => {
 
           console.log('[Camera] Image compressed:', {
             format: compressed.format,
-            originalSize: formatSize(compressed.originalSize),
+            rawSize: formatSize(compressed.originalSize),
             compressedSize: formatSize(compressed.compressedSize),
-            compressionRatio: `${compressed.compressionRatio.toFixed(1)}% reduction`,
             dimensions: `${compressed.width}x${compressed.height}`,
           });
 
@@ -324,7 +333,10 @@ const CameraPage: React.FC = () => {
               await updateData('referenceImages', [...data.referenceImages, referenceImage]);
               console.log('[Camera] Reference image saved directly:', referenceImage.id);
               stopCamera();
-              navigate(state.returnPath);
+              setShowSavedToast(true);
+              setTimeout(() => {
+                navigate(state.returnPath);
+              }, 900);
               return;
             } catch (err) {
               console.error('[Camera] Failed to save reference image:', err);
@@ -338,7 +350,7 @@ const CameraPage: React.FC = () => {
         } catch (error) {
           console.error('[Camera] Compression failed:', error);
           alert('画像の圧縮に失敗しました。元の画像を使用します。');
-          setCapturedImage(originalImageData);
+          setCapturedImage(canvas.toDataURL('image/jpeg', 0.92));
         }
 
         stopCamera();
@@ -369,6 +381,35 @@ const CameraPage: React.FC = () => {
   const handleCancelCountdown = () => {
     clearCountdown();
   };
+
+  const toggleCamera = useCallback(async () => {
+    // 現在のストリームを確実に停止
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+    }
+    setStream(null);
+    setCameraStarted(false);
+    setZoomValue(1);
+    zoomRef.current = 1;
+    zoomRangeRef.current = null;
+
+    const newMode = facingMode === 'environment' ? 'user' : 'environment';
+    setFacingMode(newMode);
+
+    // 少し待ってから新しいカメラを起動
+    await new Promise((r) => setTimeout(r, 300));
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: newMode, ...CAPTURE_RESOLUTION },
+        audio: false,
+      });
+      setStream(mediaStream);
+      setCameraStarted(true);
+    } catch (err) {
+      console.error('[Camera] toggleCamera failed:', err);
+      alert('カメラの切り替えに失敗しました');
+    }
+  }, [stream, facingMode]);
 
   const retake = () => {
     console.log('[Camera] retake clicked');
@@ -460,10 +501,20 @@ const CameraPage: React.FC = () => {
       returnPath?: string;
       blueprintId?: string;
       propertyId?: string;
+      isEdit?: boolean;
+      existingData?: any;
     } | null;
 
     if (state?.returnPath) {
-      navigate(state.returnPath);
+      if (state.isEdit) {
+        navigate(state.returnPath, {
+          state: {
+            existingData: state.existingData,
+          },
+        });
+      } else {
+        navigate(state.returnPath);
+      }
       return;
     }
 
@@ -555,6 +606,16 @@ const CameraPage: React.FC = () => {
 
   return (
     <div className="fixed inset-0 bg-black flex flex-col">
+      {showSavedToast && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center pointer-events-none">
+          <div className="bg-black/80 text-white px-6 py-4 rounded-2xl flex items-center gap-3 shadow-2xl">
+            <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+            </svg>
+            <span className="font-bold text-lg">保存完了</span>
+          </div>
+        </div>
+      )}
       <main className="flex-1 flex flex-col items-center justify-center relative">
         {!capturedImage ? (
           <div className="absolute inset-0">
@@ -657,6 +718,16 @@ const CameraPage: React.FC = () => {
                           <span className="text-xs">{timerSeconds}秒</span>
                         </button>
                       )}
+                      {/* カメラ切替ボタン */}
+                      <button
+                        onClick={toggleCamera}
+                        className="flex flex-col items-center gap-0.5 px-3 py-2 bg-slate-700 text-white rounded-xl font-semibold transition-all active:scale-95"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182M21.015 4.356v4.992" />
+                        </svg>
+                        <span className="text-[10px]">{facingMode === 'environment' ? 'イン' : 'アウト'}</span>
+                      </button>
                       {/* 即時撮影ボタン（常に表示） */}
                       <button
                         onClick={captureImage}
@@ -730,30 +801,52 @@ const CropOverlay: React.FC<{
         const containerHeight = video.clientHeight;
         const videoAspect = video.videoWidth / video.videoHeight;
 
+        // object-cover: コンテナを埋めるようにスケーリング（はみ出しはクリップ）
         let displayW: number;
         let displayH: number;
         if (containerWidth / containerHeight > videoAspect) {
-          displayH = containerHeight;
-          displayW = containerHeight * videoAspect;
-        } else {
+          // コンテナが横長 → 幅に合わせ、高さがはみ出す
           displayW = containerWidth;
           displayH = containerWidth / videoAspect;
+        } else {
+          // コンテナが縦長 → 高さに合わせ、幅がはみ出す
+          displayH = containerHeight;
+          displayW = containerHeight * videoAspect;
         }
 
-        const displayAspect = displayW / displayH;
+        // object-cover表示上でのクロップ枠計算
+        // 実際のビデオフレームに対するクロップ比率をコンテナ上の表示に変換
+        const srcW = video.videoWidth;
+        const srcH = video.videoHeight;
+        const srcAspect = srcW / srcH;
 
-        if (aspect >= displayAspect) {
-          // クロップ領域が表示領域より横長 → 上下をマスク
-          const cropH = displayW / aspect;
-          const maskSize = Math.max(0, (displayH - cropH) / 2);
-          const containerOffsetY = (containerHeight - displayH) / 2;
-          setMask({ type: 'tb', size: containerOffsetY + maskSize });
+        // captureImageと同じクロップ計算
+        let cropRatioH: number;
+        if (srcAspect > aspect) {
+          cropRatioH = 1; // 高さ全体を使用
         } else {
-          // クロップ領域が表示領域より縦長 → 左右をマスク
-          const cropW = displayH * aspect;
-          const maskSize = Math.max(0, (displayW - cropW) / 2);
-          const containerOffsetX = (containerWidth - displayW) / 2;
-          setMask({ type: 'lr', size: containerOffsetX + maskSize });
+          cropRatioH = (srcW / aspect) / srcH; // 高さをクロップ
+        }
+
+        // コンテナ上でのクロップ枠の高さ
+        const visibleH = Math.min(containerHeight, displayH);
+        const cropDisplayH = visibleH * cropRatioH;
+        const maskSize = Math.max(0, (containerHeight - cropDisplayH) / 2);
+
+        if (maskSize > 0) {
+          setMask({ type: 'tb', size: maskSize });
+        } else {
+          // 左右マスクが必要な場合
+          let cropRatioW: number;
+          if (srcAspect < aspect) {
+            cropRatioW = 1;
+          } else {
+            cropRatioW = (srcH * aspect) / srcW;
+          }
+          const visibleW = Math.min(containerWidth, displayW);
+          const cropDisplayW = visibleW * cropRatioW;
+          const maskSizeLR = Math.max(0, (containerWidth - cropDisplayW) / 2);
+          setMask({ type: 'lr', size: maskSizeLR });
         }
       }
       rafRef.current = requestAnimationFrame(update);
